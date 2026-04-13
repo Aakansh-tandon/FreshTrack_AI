@@ -1,0 +1,196 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 196 100% 45%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 270 76% 76%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 186 100% 55%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 196 100% 45%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 240 3% 5%;
+    --foreground: 0 0% 88%;
+    --card: 240 4% 9%;
+    --card-foreground: 0 0% 88%;
+    --popover: 240 4% 9%;
+    --popover-foreground: 0 0% 88%;
+    --primary: 196 100% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 270 76% 76%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 240 4% 16%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 186 100% 55%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 4% 16%;
+    --input: 240 4% 16%;
+    --ring: 196 100% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* 3D Card Effect */
+.card-3d {
+  transform-style: preserve-3d;
+  transition: transform 0.5s ease;
+}
+
+.card-3d:hover {
+  transform: translateZ(10px) rotateX(5deg) rotateY(5deg);
+}
+
+.card-3d-content {
+  transform: translateZ(20px);
+}
+
+/* Neon Glow Effect */
+.neon-glow {
+  box-shadow: 0 0 5px theme("colors.coder.primary"), 0 0 10px theme("colors.coder.primary"), 0 0 15px
+    theme("colors.coder.primary");
+}
+
+.neon-text {
+  text-shadow: 0 0 5px theme("colors.coder.primary"), 0 0 10px theme("colors.coder.primary");
+}
+
+/* Matrix Code Rain Effect */
+.matrix-bg {
+  position: relative;
+  overflow: hidden;
+}
+
+.matrix-bg::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url("data:image/svg+xml,%3Csvg width='20' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Ctext x='0' y='15' font-family='monospace' font-size='20' fill='rgba(0, 168, 232, 0.07)'%3E1%3C/text%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg width='20' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Ctext x='0' y='15' font-family='monospace' font-size='20' fill='rgba(0, 168, 232, 0.07)'%3E0%3C/text%3E%3C/svg%3E");
+  opacity: 0.1;
+  z-index: -1;
+  animation: matrix-bg 20s linear infinite;
+}
+
+/* Shimmer Effect */
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(0, 168, 232, 0.2) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 200% 100%;
+  animation: text-shimmer 3s infinite;
+}
+
+/* Cyber Button */
+.cyber-button {
+  position: relative;
+  background: linear-gradient(45deg, #00a8e8, #18ffff);
+  color: #0d0d0d;
+  font-weight: bold;
+  border: 2px solid transparent;
+  border-image: linear-gradient(45deg, #00a8e8, #bb86fc);
+  border-image-slice: 1;
+  transition: all 0.3s;
+  overflow: hidden;
+}
+
+.cyber-button::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: all 0.6s;
+}
+
+.cyber-button:hover::before {
+  left: 100%;
+}
+
+.cyber-button:hover {
+  box-shadow: 0 0 10px rgba(0, 168, 232, 0.7), 0 0 20px rgba(0, 168, 232, 0.4);
+}
+
+/* Terminal Text Effect */
+.terminal-text {
+  font-family: monospace;
+  overflow: hidden;
+  border-right: 0.15em solid #00a8e8;
+  white-space: nowrap;
+  letter-spacing: 0.1em;
+  animation: typing 3.5s steps(40, end), blink-caret 0.75s step-end infinite;
+}
+
+@keyframes typing {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes blink-caret {
+  from,
+  to {
+    border-color: transparent;
+  }
+  50% {
+    border-color: #00a8e8;
+  }
+}
+
+/* Grid Background */
+.grid-background {
+  background-image: linear-gradient(rgba(0, 168, 232, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 168, 232, 0.05) 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-position: center center;
+}
+
