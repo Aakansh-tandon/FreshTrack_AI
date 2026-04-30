@@ -12,43 +12,43 @@ interface AuthCheckProps {
 
 export default function AuthCheck({ children }: AuthCheckProps) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
+  const [hasCheckedAuth, setHasCheckedAuth] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
 
   useEffect(() => {
     const publicRoutes = ["/", "/login", "/signup"]
+    let isMounted = true
 
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      const isLoggedIn = !!session
-      setIsAuthenticated(isLoggedIn)
-
-      if (!isLoggedIn && !publicRoutes.includes(pathname || "")) {
-        router.replace("/login")
-      }
-    }
-
-    checkSession()
-
+    // Subscribe to auth state changes - this is the primary source of truth
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
+        if (!isMounted) return
+
         const isLoggedIn = !!session
         setIsAuthenticated(isLoggedIn)
+        setHasCheckedAuth(true)
+
+        // Only redirect if we're on a protected route and not logged in
         if (!isLoggedIn && !publicRoutes.includes(pathname || "")) {
           router.replace("/login")
+        }
+
+        // Only redirect if we're on a login/signup route and already logged in
+        if (isLoggedIn && (pathname === "/login" || pathname === "/signup")) {
+          router.push("/")
         }
       }
     )
 
-    return () => { subscription.unsubscribe() }
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
   }, [pathname, router])
 
-  if (isAuthenticated === null) return null
-
-  if ((pathname === "/login" || pathname === "/signup") && isAuthenticated) {
-    router.push("/")
-    return null
-  }
+  // Wait until auth state has been checked before rendering anything
+  if (!hasCheckedAuth) return null
 
   return <>{children}</>
 }
