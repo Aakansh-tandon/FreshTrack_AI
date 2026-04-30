@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useToast } from "@/hooks/use-toast"
 import { motion } from "framer-motion"
+import { supabase } from "@/lib/supabase"
 
 export default function Navbar() {
   const pathname = usePathname()
@@ -26,10 +27,22 @@ export default function Navbar() {
   const { toast } = useToast()
 
   useEffect(() => {
-    // Check authentication status
-    const authStatus = localStorage.getItem("isAuthenticated") === "true"
-    setIsAuthenticated(authStatus)
-  }, [pathname])
+    // Check initial session
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      setIsAuthenticated(!!session)
+    }
+    checkSession()
+
+    // Listen for auth state changes reactively
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setIsAuthenticated(!!session)
+      }
+    )
+
+    return () => { subscription.unsubscribe() }
+  }, [])
 
   const routes = [
     {
@@ -57,8 +70,8 @@ export default function Navbar() {
     },
   ]
 
-  const handleLogout = () => {
-    localStorage.removeItem("isAuthenticated")
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
     setIsAuthenticated(false)
     toast({
       title: "Logged out",
@@ -168,7 +181,7 @@ export default function Navbar() {
               <Link href="/" className="flex items-center space-x-2 mb-8">
                 <Code className="h-6 w-6 text-coder-primary" />
                 <span className="font-bold text-xl bg-gradient-to-r from-coder-primary to-coder-accent bg-clip-text text-transparent">
-                  FoodTracker
+                  FreshTrack AI
                 </span>
               </Link>
               <nav className="flex flex-col space-y-4">
@@ -228,4 +241,3 @@ export default function Navbar() {
     </header>
   )
 }
-

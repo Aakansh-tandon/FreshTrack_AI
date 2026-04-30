@@ -1,8 +1,8 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,47 +10,62 @@ import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Save, User, Bell, Clock } from "lucide-react"
+import { Loader2, Save, User, Bell, Clock, LogOut } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
+import { supabase } from "@/lib/supabase"
 
 export default function ProfilePage() {
   const [isLoading, setIsLoading] = useState(false)
   const [userData, setUserData] = useState({
-    name: "John Doe",
-    email: "john.doe@example.com",
+    name: "",
+    email: "",
     avatar: "",
-    notificationCount: 5,
-    savedRecipes: 12,
-    trackedItems: 8,
+    createdAt: "",
+    notificationCount: 0,
+    savedRecipes: 0,
+    trackedItems: 0,
   })
   const { toast } = useToast()
+  const router = useRouter()
 
-  // Simulate loading user data
   useEffect(() => {
-    // In a real app, this would fetch user data from an API
-    const email = localStorage.getItem("userEmail") || "demo@example.com"
-    const name = localStorage.getItem("userName") || "Demo User"
+    const fetchUser = async () => {
+      const { data: { user }, error } = await supabase.auth.getUser()
+      if (error || !user) {
+        router.push("/login")
+        return
+      }
+      setUserData({
+        name: user.user_metadata?.full_name || user.email?.split("@")[0] || "User",
+        email: user.email || "",
+        avatar: "",
+        createdAt: user.created_at || "",
+        notificationCount: 0,
+        savedRecipes: 0,
+        trackedItems: 0,
+      })
+    }
+    fetchUser()
+  }, [router])
 
-    setUserData({
-      ...userData,
-      email,
-      name,
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    toast({
+      title: "Signed out",
+      description: "You have been signed out successfully",
     })
-  }, [])
+    router.push("/")
+  }
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      // Save to localStorage for demo purposes
-      localStorage.setItem("userName", userData.name)
-      localStorage.setItem("userEmail", userData.email)
-
+      const { error } = await supabase.auth.updateUser({
+        data: { full_name: userData.name },
+      })
+      if (error) throw error
       toast({
         title: "Profile updated",
         description: "Your profile has been updated successfully",
@@ -67,6 +82,10 @@ export default function ProfilePage() {
     }
   }
 
+  const memberSince = userData.createdAt
+    ? new Date(userData.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+    : ""
+
   return (
     <div className="container mx-auto p-4 max-w-4xl">
       <h1 className="text-2xl font-bold bg-gradient-to-r from-coder-primary to-coder-accent bg-clip-text text-transparent">My Profile</h1>
@@ -78,15 +97,15 @@ export default function ProfilePage() {
             <Avatar className="h-24 w-24 mb-4">
               <AvatarImage src={userData.avatar} alt={userData.name} />
               <AvatarFallback className="bg-coder-primary/10 text-coder-primary text-xl">
-                {userData.name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")}
+                {userData.name.split(" ").map((n) => n[0]).join("")}
               </AvatarFallback>
             </Avatar>
 
             <h2 className="text-xl font-semibold mb-1">{userData.name}</h2>
-            <p className="text-sm text-muted-foreground mb-4">{userData.email}</p>
+            <p className="text-sm text-muted-foreground mb-1">{userData.email}</p>
+            {memberSince && (
+              <p className="text-xs text-muted-foreground mb-4">Member since {memberSince}</p>
+            )}
 
             <div className="w-full grid grid-cols-3 gap-2 mb-6">
               <div className="flex flex-col items-center p-2 bg-muted rounded-md">
@@ -106,12 +125,20 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div className="w-full">
+            <div className="w-full space-y-2">
               <Link href="/settings">
-                <Button variant="outline" className="w-full">
+                <Button variant="outline" className="w-full border-coder-primary/30 hover:bg-coder-primary/10">
                   Account Settings
                 </Button>
               </Link>
+              <Button
+                variant="outline"
+                className="w-full border-destructive/50 text-destructive hover:bg-destructive/10"
+                onClick={handleSignOut}
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign Out
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -150,18 +177,14 @@ export default function ProfilePage() {
                         id="email"
                         type="email"
                         value={userData.email}
-                        onChange={(e) => setUserData({ ...userData, email: e.target.value })}
-                        className="border-coder-primary/30"
+                        disabled
+                        className="border-coder-primary/30 opacity-60"
                       />
-                    </div>
-
-                    <div className="grid gap-2">
-                      <Label htmlFor="avatar">Profile Picture</Label>
-                      <Input id="avatar" type="file" accept="image/*" className="border-coder-primary/30" />
+                      <p className="text-xs text-muted-foreground">Email cannot be changed</p>
                     </div>
                   </div>
 
-                  <Button className="mt-6 w-full" disabled={isLoading}>
+                  <Button className="mt-6 w-full bg-coder-primary hover:bg-coder-primary/80 text-black" disabled={isLoading}>
                     {isLoading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -184,16 +207,10 @@ export default function ProfilePage() {
                   <div>
                     <h3 className="text-lg font-medium mb-2">Dietary Preferences</h3>
                     <div className="flex flex-wrap gap-2">
-                      <Badge variant="outline" className="cursor-pointer hover:bg-primary/10">
-                        Vegetarian
-                      </Badge>
+                      <Badge variant="outline" className="cursor-pointer hover:bg-primary/10">Vegetarian</Badge>
                       <Badge className="cursor-pointer">Gluten-Free</Badge>
-                      <Badge variant="outline" className="cursor-pointer hover:bg-primary/10">
-                        Vegan
-                      </Badge>
-                      <Badge variant="outline" className="cursor-pointer hover:bg-primary/10">
-                        Keto
-                      </Badge>
+                      <Badge variant="outline" className="cursor-pointer hover:bg-primary/10">Vegan</Badge>
+                      <Badge variant="outline" className="cursor-pointer hover:bg-primary/10">Keto</Badge>
                       <Badge className="cursor-pointer">Low Carb</Badge>
                     </div>
                   </div>
@@ -217,7 +234,7 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                <Button className="mt-6 w-full">
+                <Button className="mt-6 w-full bg-coder-primary hover:bg-coder-primary/80 text-black">
                   <Save className="mr-2 h-4 w-4" />
                   Save Preferences
                 </Button>
@@ -233,4 +250,3 @@ export default function ProfilePage() {
     </div>
   )
 }
-

@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/hooks/use-toast"
 import { Eye, EyeOff, Loader2, Code } from "lucide-react"
 import { motion } from "framer-motion"
+import { supabase } from "@/lib/supabase"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -37,25 +38,31 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      // In a real app, this would call an authentication API
-      // For demo purposes, we'll simulate a successful login
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-      // Store auth state (in a real app, this would be a JWT token)
-      localStorage.setItem("isAuthenticated", "true")
+      if (error) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        })
+        return
+      }
 
       toast({
         title: "Success",
         description: "You have successfully logged in",
       })
 
-      // Redirect to home page
-      window.location.href = "/"
+      router.push("/inventory")
     } catch (error) {
       console.error("Login error:", error)
       toast({
         title: "Error",
-        description: "Invalid email or password",
+        description: "An unexpected error occurred",
         variant: "destructive",
       })
     } finally {
@@ -64,25 +71,32 @@ export default function LoginPage() {
   }
 
   const handleDemoLogin = async () => {
-    setEmail("demo@example.com")
-    setPassword("demo123")
+    setEmail("demo@freshtrack.ai")
+    setPassword("demo123456")
 
     setIsLoading(true)
 
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const { error } = await supabase.auth.signInWithPassword({
+        email: "demo@freshtrack.ai",
+        password: "demo123456",
+      })
 
-      // Store auth state
-      localStorage.setItem("isAuthenticated", "true")
+      if (error) {
+        toast({
+          title: "Demo Login Failed",
+          description: error.message,
+          variant: "destructive",
+        })
+        return
+      }
 
       toast({
         title: "Demo Login",
         description: "Logged in with demo account",
       })
 
-      // Redirect to home page
-      window.location.href = "/"
+      router.push("/inventory")
     } catch (error) {
       console.error("Demo login error:", error)
     } finally {
@@ -243,4 +257,3 @@ export default function LoginPage() {
     </div>
   )
 }
-
