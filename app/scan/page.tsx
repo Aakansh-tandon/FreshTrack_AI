@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { ScanLine, Camera, X, Check, Edit, ArrowRight, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { createWorker } from "tesseract.js"
+import { supabase } from "@/lib/supabase"
 
 export default function ScanPage() {
   const [scanning, setScanning] = useState(false)
@@ -19,6 +20,7 @@ export default function ScanPage() {
   const [productName, setProductName] = useState("")
   const [productCategory, setProductCategory] = useState("other")
   const [capturedImage, setCapturedImage] = useState<string | null>(null)
+  const [ocrConfidence, setOcrConfidence] = useState<number | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const router = useRouter()
@@ -136,6 +138,9 @@ export default function ScanPage() {
       // Recognize text in the image
       const { data } = await tesseractWorker.recognize(imageData)
 
+      // Store OCR confidence from Tesseract result
+      setOcrConfidence(data.confidence ?? null)
+
       // Extract date patterns from the recognized text
       const datePattern = extractDateFromText(data.text)
 
@@ -169,13 +174,13 @@ export default function ScanPage() {
 
     // Common date formats: DD/MM/YYYY, MM/DD/YYYY, YYYY/MM/DD, DD-MM-YYYY, etc.
     const datePatterns = [
-      /\b\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}\b/g, // DD/MM/YYYY or MM/DD/YYYY
-      /\b\d{2,4}[/\-.]\d{1,2}[/\-.]\d{1,2}\b/g, // YYYY/MM/DD
+      /\b\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4}\b/g, // DD/MM/YYYY or MM/DD/YYYY
+      /\b\d{2,4}[/\-\.]\d{1,2}[/\-\.]\d{1,2}\b/g, // YYYY/MM/DD
       /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2},? \d{2,4}\b/gi, // Month DD, YYYY
       /\b\d{1,2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{2,4}\b/gi, // DD Month YYYY
-      /\bBest Before:?\s+\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}\b/gi, // Best Before: DD/MM/YYYY
-      /\bExp(?:iry|\.)?:?\s+\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}\b/gi, // Expiry: DD/MM/YYYY
-      /\bUse By:?\s+\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}\b/gi, // Use By: DD/MM/YYYY
+      /\bBest Before:?\s+\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4}\b/gi, // Best Before: DD/MM/YYYY
+      /\bExp(?:iry|\\.)?:?\s+\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4}\b/gi, // Expiry: DD/MM/YYYY
+      /\bUse By:?\s+\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4}\b/gi, // Use By: DD/MM/YYYY
     ]
 
     // Try to match any of the patterns
@@ -205,8 +210,8 @@ export default function ScanPage() {
     return null
   }
 
-  // Add product to inventory
-  const addProductToInventory = () => {
+  // Add product to inventory via Supabase API
+  const addProductToInventory = async () => {
     if (!productName || !result) {
       toast({
         title: "Missing information",
@@ -238,26 +243,38 @@ export default function ScanPage() {
         expiryDate.setDate(expiryDate.getDate() + 7)
       }
 
-      // Calculate days left until expiry
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      expiryDate.setHours(0, 0, 0, 0)
-      const diffTime = Math.abs(expiryDate.getTime() - today.getTime())
-      const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+      // Format as YYYY-MM-DD for Supabase DATE column
+      const formattedDate = expiryDate.toISOString().split("T")[0]
 
-      // Create new inventory item
-      const newItem = {
-        id: Date.now(),
-        name: productName,
-        category: productCategory,
-        expiryDate: expiryDate.toISOString(),
-        daysLeft,
-        quantity: 1,
+      // Get JWT token
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+
+      if (!token) {
+        toast({
+          title: "Error",
+          description: "You must be logged in to add items",
+          variant: "destructive",
+        })
+        return
       }
 
-      // Get existing inventory or initialize empty array
-      const existingInventory = JSON.parse(localStorage.getItem("inventory") || "[]")
-      localStorage.setItem("inventory", JSON.stringify([...existingInventory, newItem]))
+      const response = await fetch("/api/inventory", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          product_name: productName,
+          category: productCategory,
+          expiry_date: formattedDate,
+          quantity: 1,
+          ocr_confidence: ocrConfidence,
+        }),
+      })
+
+      if (!response.ok) throw new Error("Failed to save item")
 
       toast({
         title: "Product added",
@@ -344,6 +361,14 @@ export default function ScanPage() {
               <Input id="scanned-date" value={result || ""} readOnly className="bg-muted" />
             </div>
 
+            {ocrConfidence !== null && (
+              <div className="text-xs text-muted-foreground">
+                OCR Confidence: <span className={ocrConfidence >= 80 ? "text-coder-primary" : ocrConfidence >= 50 ? "text-yellow-500" : "text-destructive"}>{ocrConfidence.toFixed(1)}%</span>
+                {" — "}
+                {ocrConfidence >= 80 ? "High" : ocrConfidence >= 50 ? "Medium" : "Low"}
+              </div>
+            )}
+
             <div>
               <Label htmlFor="product-name">Product Name</Label>
               <Input
@@ -363,16 +388,15 @@ export default function ScanPage() {
                 onChange={(e) => setProductCategory(e.target.value)}
                 className="flex h-10 w-full rounded-md border border-coder-primary/30 bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
-                <option value="dairy">Dairy</option>
-                <option value="meat">Meat</option>
-                <option value="vegetables">Vegetables</option>
-                <option value="fruits">Fruits</option>
-                <option value="bakery">Bakery</option>
-                <option value="frozen">Frozen</option>
-                <option value="canned">Canned</option>
-                <option value="beverages">Beverages</option>
-                <option value="snacks">Snacks</option>
-                <option value="other">Other</option>
+                <option value="Dairy">Dairy</option>
+                <option value="Meat">Meat</option>
+                <option value="Produce">Produce</option>
+                <option value="Bakery">Bakery</option>
+                <option value="Frozen">Frozen</option>
+                <option value="Canned">Canned</option>
+                <option value="Beverages">Beverages</option>
+                <option value="Snacks">Snacks</option>
+                <option value="Other">Other</option>
               </select>
             </div>
           </CardContent>
@@ -424,6 +448,7 @@ export default function ScanPage() {
                 setResult(null)
                 setShowProductForm(false)
                 setShowOptions(true)
+                setOcrConfidence(null)
               }}
               className="flex-1"
             >
@@ -459,4 +484,3 @@ export default function ScanPage() {
     </div>
   )
 }
-

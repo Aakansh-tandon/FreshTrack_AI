@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"
 import { Bell } from "lucide-react"
@@ -9,13 +9,14 @@ import { Card } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import ExpiryAlert from "@/components/expiry-alert"
 import { motion, AnimatePresence } from "framer-motion"
+import { supabase } from "@/lib/supabase"
 
 type Notification = {
-  id: number
-  productName: string
-  expiryDate: string
-  daysLeft: number
-  read: boolean
+  id: string
+  message: string
+  type: string
+  is_read: boolean
+  created_at: string
 }
 
 export default function NotificationsPopover() {
@@ -26,19 +27,32 @@ export default function NotificationsPopover() {
   const [currentAlert, setCurrentAlert] = useState<Notification | null>(null)
   const { toast } = useToast()
 
-  // Fetch notifications
-  const fetchNotifications = async () => {
+  // Get JWT token
+  const getToken = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    return session?.access_token || ""
+  }, [])
+
+  // Fetch notifications from Supabase
+  const fetchNotifications = useCallback(async () => {
     setLoading(true)
     try {
-      const response = await fetch("/api/notifications")
-      const data = await response.json()
-      setNotifications(data.notifications || [])
+      const token = await getToken()
+      if (!token) return
 
-      // Check for critical notifications (expiring in less than 3 days)
-      const criticalNotifications = data.notifications.filter((n: Notification) => n.daysLeft <= 3 && !n.read)
+      const response = await fetch("/api/notifications", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await response.json()
+      const notifs = data.notifications || []
+      setNotifications(notifs)
+
+      // Check for critical notifications
+      const criticalNotifications = notifs.filter(
+        (n: Notification) => n.type === "critical" && !n.is_read
+      )
 
       if (criticalNotifications.length > 0) {
-        // Show the first critical notification as an alert
         setCurrentAlert(criticalNotifications[0])
         setShowExpiryAlert(true)
       }
@@ -52,22 +66,26 @@ export default function NotificationsPopover() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [getToken, toast])
 
   // Mark notification as read
-  const markAsRead = async (id: number) => {
+  const markAsRead = async (id: string) => {
     try {
+      const token = await getToken()
       await fetch("/api/notifications", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ notificationId: id }),
       })
 
       // Update local state
       setNotifications(
-        notifications.map((notification) => (notification.id === id ? { ...notification, read: true } : notification)),
+        notifications.map((notification) =>
+          notification.id === id ? { ...notification, is_read: true } : notification
+        ),
       )
 
       // If this was the current alert, dismiss it
@@ -80,12 +98,12 @@ export default function NotificationsPopover() {
     }
   }
 
-  // Load notifications when component mounts or popover opens
+  // Load notifications when popover opens
   useEffect(() => {
     if (open) {
       fetchNotifications()
     }
-  }, [open])
+  }, [open, fetchNotifications])
 
   // Check for notifications on initial load
   useEffect(() => {
@@ -95,10 +113,22 @@ export default function NotificationsPopover() {
     const interval = setInterval(fetchNotifications, 60000)
 
     return () => clearInterval(interval)
-  }, [])
+  }, [fetchNotifications])
 
   // Count unread notifications
-  const unreadCount = notifications.filter((n) => !n.read).length
+  const unreadCount = notifications.filter((n) => !n.is_read).length
+
+  // Get badge variant based on notification type
+  const getTypeBadge = (type: string) => {
+    switch (type) {
+      case "critical":
+        return "bg-destructive text-white"
+      case "warning":
+        return "bg-warning text-black"
+      default:
+        return "bg-coder-primary text-black"
+    }
+  }
 
   return (
     <>
@@ -155,24 +185,19 @@ export default function NotificationsPopover() {
                   >
                     <Card
                       className={`m-2 p-3 cursor-pointer hover:bg-coder-primary/5 transition-all ${
-                        notification.read ? "opacity-70" : "border-l-4 border-l-coder-primary"
+                        notification.is_read ? "opacity-70" : "border-l-4 border-l-coder-primary"
                       }`}
                       onClick={() => markAsRead(notification.id)}
                     >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h4 className="font-medium">{notification.productName} expiring soon</h4>
-                          <p className="text-sm text-muted-foreground">
-                            Expires in {notification.daysLeft} {notification.daysLeft === 1 ? "day" : "days"}
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="flex-1">
+                          <p className="text-sm">{notification.message}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {new Date(notification.created_at).toLocaleString()}
                           </p>
                         </div>
-                        <Badge
-                          variant={notification.daysLeft <= 2 ? "destructive" : "default"}
-                          className={
-                            notification.daysLeft <= 2 ? "bg-destructive text-white" : "bg-coder-primary text-black"
-                          }
-                        >
-                          {notification.daysLeft} {notification.daysLeft === 1 ? "day" : "days"}
+                        <Badge className={getTypeBadge(notification.type)} variant="default">
+                          {notification.type}
                         </Badge>
                       </div>
                     </Card>
@@ -194,7 +219,7 @@ export default function NotificationsPopover() {
         </PopoverContent>
       </Popover>
 
-      {/* Expiry Alert for items expiring in less than 3 days */}
+      {/* Expiry Alert for critical notifications */}
       <AnimatePresence>
         {showExpiryAlert && currentAlert && (
           <ExpiryAlert
@@ -209,4 +234,3 @@ export default function NotificationsPopover() {
     </>
   )
 }
-

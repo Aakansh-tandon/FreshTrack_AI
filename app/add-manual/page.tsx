@@ -16,19 +16,19 @@ import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
+import { supabase } from "@/lib/supabase"
 
 // Sample categories
 const categories = [
-  { value: "dairy", label: "Dairy" },
-  { value: "meat", label: "Meat" },
-  { value: "vegetables", label: "Vegetables" },
-  { value: "fruits", label: "Fruits" },
-  { value: "bakery", label: "Bakery" },
-  { value: "frozen", label: "Frozen" },
-  { value: "canned", label: "Canned" },
-  { value: "beverages", label: "Beverages" },
-  { value: "snacks", label: "Snacks" },
-  { value: "other", label: "Other" },
+  { value: "Dairy", label: "Dairy" },
+  { value: "Meat", label: "Meat" },
+  { value: "Produce", label: "Produce" },
+  { value: "Bakery", label: "Bakery" },
+  { value: "Frozen", label: "Frozen" },
+  { value: "Canned", label: "Canned" },
+  { value: "Beverages", label: "Beverages" },
+  { value: "Snacks", label: "Snacks" },
+  { value: "Other", label: "Other" },
 ]
 
 export default function AddManualPage() {
@@ -55,32 +55,37 @@ export default function AddManualPage() {
     setIsSubmitting(true)
 
     try {
-      // In a real app, this would save to a database
-      // For demo purposes, we'll just simulate a successful save
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      // Get JWT token
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
 
-      // Calculate days left until expiry
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const expiry = new Date(expiryDate)
-      expiry.setHours(0, 0, 0, 0)
-      const diffTime = Math.abs(expiry.getTime() - today.getTime())
-      const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-
-      // Store in localStorage for demo purposes
-      // In a real app, this would be stored in a database
-      const newItem = {
-        id: Date.now(),
-        name: productName,
-        category,
-        expiryDate: expiryDate.toISOString(),
-        daysLeft,
-        quantity: Number.parseInt(quantity),
+      if (!token) {
+        toast({
+          title: "Error",
+          description: "You must be logged in to add items",
+          variant: "destructive",
+        })
+        return
       }
 
-      // Get existing inventory or initialize empty array
-      const existingInventory = JSON.parse(localStorage.getItem("inventory") || "[]")
-      localStorage.setItem("inventory", JSON.stringify([...existingInventory, newItem]))
+      // Format date as YYYY-MM-DD for Supabase DATE column
+      const formattedDate = expiryDate.toISOString().split("T")[0]
+
+      const response = await fetch("/api/inventory", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          product_name: productName,
+          category,
+          expiry_date: formattedDate,
+          quantity: Number.parseInt(quantity),
+        }),
+      })
+
+      if (!response.ok) throw new Error("Failed to save item")
 
       toast({
         title: "Product added",
@@ -230,4 +235,3 @@ export default function AddManualPage() {
     </div>
   )
 }
-

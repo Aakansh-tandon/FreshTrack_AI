@@ -1,75 +1,69 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ScanLine, Plus, Trash2, ChefHat, AlertTriangle, Search } from "lucide-react"
+import { ScanLine, Plus, ChefHat, AlertTriangle, Search, MoreVertical, CheckCircle, Trash2 } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { AnimatePresence, motion } from "framer-motion"
-
-// Sample inventory data as fallback
-const sampleInventory = [
-  {
-    id: 1,
-    name: "Milk",
-    expiryDate: "2025-04-15",
-    daysLeft: 12,
-    category: "Dairy",
-  },
-  {
-    id: 2,
-    name: "Bread",
-    expiryDate: "2025-04-05",
-    daysLeft: 2,
-    category: "Bakery",
-  },
-  {
-    id: 3,
-    name: "Chicken",
-    expiryDate: "2025-04-07",
-    daysLeft: 4,
-    category: "Meat",
-  },
-  {
-    id: 4,
-    name: "Spinach",
-    expiryDate: "2025-04-06",
-    daysLeft: 3,
-    category: "Vegetables",
-  },
-  {
-    id: 5,
-    name: "Yogurt",
-    expiryDate: "2025-04-10",
-    daysLeft: 7,
-    category: "Dairy",
-  },
-]
+import { supabase } from "@/lib/supabase"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import type { InventoryItem } from "@/types/database"
 
 export default function InventoryPage() {
-  const [inventory, setInventory] = useState(sampleInventory)
+  const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [searchQuery, setSearchQuery] = useState("")
-  const [filteredInventory, setFilteredInventory] = useState(inventory)
+  const [filteredInventory, setFilteredInventory] = useState<InventoryItem[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const { toast } = useToast()
+  const router = useRouter()
 
-  // Load inventory from localStorage on mount
-  useEffect(() => {
+  // Get JWT token from Supabase session
+  const getToken = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    return session?.access_token || ""
+  }, [])
+
+  // Fetch inventory from Supabase via API route
+  const fetchInventory = useCallback(async () => {
     try {
-      const storedInventory = localStorage.getItem("inventory")
-      if (storedInventory) {
-        const parsedInventory = JSON.parse(storedInventory)
-        if (Array.isArray(parsedInventory) && parsedInventory.length > 0) {
-          setInventory(parsedInventory)
-        }
+      const token = await getToken()
+      if (!token) return
+
+      const response = await fetch("/api/inventory", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await response.json()
+
+      if (data.items) {
+        setInventory(data.items)
       }
     } catch (error) {
-      console.error("Error loading inventory from localStorage:", error)
+      console.error("Error fetching inventory:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load inventory",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
     }
-  }, [])
+  }, [getToken, toast])
+
+  // Load inventory on mount
+  useEffect(() => {
+    fetchInventory()
+  }, [fetchInventory])
 
   // Filter inventory when search query or inventory changes
   useEffect(() => {
@@ -78,66 +72,154 @@ export default function InventoryPage() {
     } else {
       const query = searchQuery.toLowerCase()
       const filtered = inventory.filter(
-        (item) => item.name.toLowerCase().includes(query) || item.category.toLowerCase().includes(query),
+        (item) =>
+          item.product_name.toLowerCase().includes(query) ||
+          item.category.toLowerCase().includes(query),
       )
       setFilteredInventory(filtered)
     }
   }, [searchQuery, inventory])
 
-  // Function to remove an item from inventory
-  const removeItem = (id: number) => {
-    const updatedInventory = inventory.filter((item) => item.id !== id)
-    setInventory(updatedInventory)
-
-    // Update localStorage
+  // Handle consumption action (consumed or discarded)
+  const handleItemAction = async (id: string, action: "consumed" | "discarded") => {
     try {
-      localStorage.setItem("inventory", JSON.stringify(updatedInventory))
+      const token = await getToken()
+      const response = await fetch(`/api/inventory/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ action }),
+      })
+
+      if (!response.ok) throw new Error("Failed to update item")
+
+      // Remove from local state
+      setInventory((prev) => prev.filter((item) => item.id !== id))
+
+      toast({
+        title: action === "consumed" ? "Item consumed" : "Item discarded",
+        description:
+          action === "consumed"
+            ? "Item marked as consumed and logged"
+            : "Item discarded and logged for analytics",
+      })
     } catch (error) {
-      console.error("Error updating localStorage:", error)
+      console.error("Error updating item:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update item",
+        variant: "destructive",
+      })
     }
-
-    toast({
-      title: "Item removed",
-      description: "Item has been removed from your inventory",
-    })
   }
 
-  // Function to get badge variant based on days left
-  const getBadgeVariant = (daysLeft: number) => {
-    if (daysLeft <= 2) return "destructive"
-    if (daysLeft <= 5) return "warning"
-    return "success"
+  // Badge variant based on status
+  const getBadgeVariant = (status: string) => {
+    switch (status) {
+      case "expired":
+        return "destructive"
+      case "critical":
+        return "destructive"
+      case "expiring_soon":
+        return "warning"
+      default:
+        return "success"
+    }
   }
 
-  // Function to get status text based on days left
-  const getStatusText = (daysLeft: number) => {
-    if (daysLeft <= 2) return `${daysLeft} days left`
-    if (daysLeft <= 5) return "Expiring Soon"
-    return "Fresh"
+  // Status display text
+  const getStatusText = (item: InventoryItem) => {
+    switch (item.status) {
+      case "expired":
+        return "Expired"
+      case "critical":
+        return `${item.days_remaining} day${item.days_remaining === 1 ? "" : "s"} left`
+      case "expiring_soon":
+        return "Expiring Soon"
+      default:
+        return "Fresh"
+    }
+  }
+
+  // Badge extra classes
+  const getBadgeClasses = (status: string) => {
+    switch (status) {
+      case "expired":
+        return "bg-destructive text-white"
+      case "critical":
+        return "bg-coder-primary text-black animate-pulse"
+      case "expiring_soon":
+        return "bg-warning text-black"
+      default:
+        return "bg-green-600 text-white"
+    }
   }
 
   // Find recipes for a specific item
   const findRecipesForItem = (itemName: string) => {
-    // Store the ingredient in localStorage for the recipe generation page
     localStorage.setItem("recipeIngredients", JSON.stringify([itemName]))
-    // Navigate to recipe generation page
     window.location.href = "/recipes/generate"
   }
 
-  // Show notification for items expiring in less than 3 days
+  // Auto-trigger recipe generation for critical items
   useEffect(() => {
-    const expiringItems = inventory.filter((item) => item.daysLeft <= 3)
+    const triggerAutoRecipe = async () => {
+      try {
+        const token = await getToken()
+        if (!token) return
+
+        const response = await fetch("/api/auto-trigger", {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const data = await response.json()
+
+        if (data.triggered) {
+          toast({
+            title: "🍳 Recipe auto-generated!",
+            description: `${data.recipe_title} — uses your expiring items → View Recipes`,
+            onClick: () => router.push("/recipes"),
+          })
+        }
+      } catch (error) {
+        console.error("Auto-trigger error:", error)
+      }
+    }
+
+    triggerAutoRecipe()
+
+    // Re-check every 5 minutes
+    const interval = setInterval(triggerAutoRecipe, 5 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [getToken, router, toast])
+
+  // Show notification for expiring items
+  useEffect(() => {
+    const expiringItems = inventory.filter(
+      (item) => item.days_remaining <= 3 && item.status !== "expired"
+    )
 
     if (expiringItems.length > 0) {
-      // In a real app, this would trigger a push notification
-      // For demo purposes, we'll just show a toast
       toast({
         title: "Items Expiring Soon!",
         description: `You have ${expiringItems.length} items expiring in the next 3 days`,
         variant: "destructive",
       })
     }
-  }, [])
+  }, [inventory, toast])
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-4 max-w-4xl flex items-center justify-center min-h-[50vh]">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+          className="h-8 w-8 border-2 border-coder-primary border-t-transparent rounded-full"
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="container mx-auto p-4 max-w-4xl relative">
@@ -208,7 +290,7 @@ export default function InventoryPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <AnimatePresence>
                 {filteredInventory
-                  .filter((item) => item.daysLeft <= 3)
+                  .filter((item) => item.days_remaining <= 3)
                   .map((item, index) => (
                     <motion.div
                       key={item.id}
@@ -217,29 +299,29 @@ export default function InventoryPage() {
                       transition={{ duration: 0.3, delay: index * 0.1 }}
                     >
                       <Card
-                        className={`bg-muted/50 ${item.daysLeft <= 2 ? "border-destructive/50" : "border-warning/50"} overflow-hidden`}
+                        className={`bg-muted/50 ${item.days_remaining <= 2 ? "border-destructive/50" : "border-warning/50"} overflow-hidden`}
                       >
                         <div className="absolute inset-0 bg-gradient-to-br from-destructive/5 to-transparent"></div>
                         <CardContent className="p-4 flex justify-between items-center relative">
                           <div>
-                            <h3 className="font-medium">{item.name}</h3>
+                            <h3 className="font-medium">{item.product_name}</h3>
                             <p className="text-sm text-muted-foreground">
-                              Expires: {new Date(item.expiryDate).toLocaleDateString()}
+                              Expires: {new Date(item.expiry_date).toLocaleDateString()}
                             </p>
                           </div>
                           <div className="flex gap-2">
                             <Badge
-                              variant={getBadgeVariant(item.daysLeft)}
-                              className={`${item.daysLeft <= 2 ? "bg-destructive text-white" : "bg-warning text-black"} animate-pulse`}
+                              variant={getBadgeVariant(item.status)}
+                              className={`${item.days_remaining <= 2 ? "bg-destructive text-white" : "bg-warning text-black"} animate-pulse`}
                             >
-                              {item.daysLeft} days left
+                              {item.days_remaining} days left
                             </Badge>
                             <Button
                               variant="ghost"
                               size="icon"
                               title="Find recipes"
                               className="hover:bg-coder-primary/10 hover:text-coder-primary"
-                              onClick={() => findRecipesForItem(item.name)}
+                              onClick={() => findRecipesForItem(item.product_name)}
                             >
                               <ChefHat className="h-4 w-4" />
                             </Button>
@@ -249,7 +331,7 @@ export default function InventoryPage() {
                     </motion.div>
                   ))}
               </AnimatePresence>
-              {filteredInventory.filter((item) => item.daysLeft <= 3).length === 0 && (
+              {filteredInventory.filter((item) => item.days_remaining <= 3).length === 0 && (
                 <p className="text-muted-foreground col-span-2 text-center py-4">No items expiring soon</p>
               )}
             </div>
@@ -295,15 +377,15 @@ export default function InventoryPage() {
                         transition={{ duration: 0.3, delay: 0.1 + index * 0.05 }}
                         className={`border-b border-border/40 hover:bg-primary/5`}
                       >
-                        <TableCell className="font-medium">{item.name}</TableCell>
+                        <TableCell className="font-medium">{item.product_name}</TableCell>
                         <TableCell>{item.category}</TableCell>
-                        <TableCell>{new Date(item.expiryDate).toLocaleDateString()}</TableCell>
+                        <TableCell>{new Date(item.expiry_date).toLocaleDateString()}</TableCell>
                         <TableCell>
                           <Badge
-                            variant={getBadgeVariant(item.daysLeft)}
-                            className={item.daysLeft <= 3 ? "animate-pulse" : ""}
+                            variant={getBadgeVariant(item.status)}
+                            className={getBadgeClasses(item.status)}
                           >
-                            {getStatusText(item.daysLeft)}
+                            {getStatusText(item)}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
@@ -313,19 +395,37 @@ export default function InventoryPage() {
                               size="icon"
                               title="Find recipes"
                               className="hover:bg-coder-primary/10 hover:text-coder-primary"
-                              onClick={() => findRecipesForItem(item.name)}
+                              onClick={() => findRecipesForItem(item.product_name)}
                             >
                               <ChefHat className="h-4 w-4" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => removeItem(item.id)}
-                              title="Remove item"
-                              className="hover:bg-destructive/10 hover:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="hover:bg-destructive/10 hover:text-destructive"
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="border-coder-primary/20 bg-card/90 backdrop-blur-md">
+                                <DropdownMenuItem
+                                  onClick={() => handleItemAction(item.id, "consumed")}
+                                  className="hover:bg-coder-primary/10 focus:bg-coder-primary/10"
+                                >
+                                  <CheckCircle className="mr-2 h-4 w-4 text-coder-primary" />
+                                  Mark as Consumed
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => handleItemAction(item.id, "discarded")}
+                                  className="text-destructive hover:bg-destructive/10 focus:bg-destructive/10"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Discard (Expired/Waste)
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         </TableCell>
                       </motion.tr>
@@ -340,4 +440,3 @@ export default function InventoryPage() {
     </div>
   )
 }
-

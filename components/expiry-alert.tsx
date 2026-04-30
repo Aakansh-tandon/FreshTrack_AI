@@ -9,11 +9,11 @@ import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 
 type Notification = {
-  id: number
-  productName: string
-  expiryDate: string
-  daysLeft: number
-  read: boolean
+  id: string
+  message: string
+  type: string
+  is_read: boolean
+  created_at: string
 }
 
 interface ExpiryAlertProps {
@@ -47,9 +47,11 @@ export default function ExpiryAlert({ notification, onClose }: ExpiryAlertProps)
   }
 
   const handleFindRecipes = () => {
-    window.location.href = "/recipes/generate"
+    router.push("/recipes")
     handleClose()
   }
+
+  const isCritical = notification.type === "critical"
 
   return (
     <motion.div
@@ -72,7 +74,9 @@ export default function ExpiryAlert({ notification, onClose }: ExpiryAlertProps)
             </motion.div>
             <div className="flex-1">
               <div className="flex justify-between items-start">
-                <h3 className="font-medium text-destructive">Expiring Soon!</h3>
+                <h3 className="font-medium text-destructive">
+                  {isCritical ? "Critical Alert!" : "Expiring Soon!"}
+                </h3>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -82,13 +86,13 @@ export default function ExpiryAlert({ notification, onClose }: ExpiryAlertProps)
                   <X className="h-4 w-4" />
                 </Button>
               </div>
-              <p className="text-sm mt-1">
-                <span className="font-medium">{notification.productName}</span> will expire in {notification.daysLeft}{" "}
-                {notification.daysLeft === 1 ? "day" : "days"}
-              </p>
+              <p className="text-sm mt-1">{notification.message}</p>
               <div className="mt-2">
-                <Badge variant={notification.daysLeft <= 2 ? "destructive" : "default"} className="animate-pulse">
-                  {notification.daysLeft} {notification.daysLeft === 1 ? "day" : "days"} left
+                <Badge
+                  variant={isCritical ? "destructive" : "default"}
+                  className="animate-pulse"
+                >
+                  {notification.type}
                 </Badge>
               </div>
             </div>
@@ -117,4 +121,3 @@ export default function ExpiryAlert({ notification, onClose }: ExpiryAlertProps)
     </motion.div>
   )
 }
-

@@ -1,59 +1,83 @@
 import { NextResponse } from "next/server"
+import { supabaseAdmin } from "@/lib/supabase"
+import { createClient } from "@supabase/supabase-js"
 
-// In a real app, this would connect to a notification service
-export async function GET() {
+async function getUser(request: Request) {
+  const authHeader = request.headers.get("Authorization")
+  if (!authHeader?.startsWith("Bearer ")) return null
+
+  const token = authHeader.replace("Bearer ", "")
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+  const { data: { user }, error } = await supabase.auth.getUser(token)
+  if (error || !user) return null
+  return user
+}
+
+// GET /api/notifications — fetch unread notifications
+export async function GET(request: Request) {
   try {
-    // For demo purposes, we'll return some sample notifications
-    // In a real app, this would query a database for items expiring soon
-    const notifications = [
-      {
-        id: 1,
-        productName: "Milk",
-        expiryDate: "2025-04-15",
-        daysLeft: 2,
-        read: false,
-      },
-      {
-        id: 2,
-        productName: "Bread",
-        expiryDate: "2025-04-05",
-        daysLeft: 1,
-        read: false,
-      },
-      {
-        id: 3,
-        productName: "Chicken",
-        expiryDate: "2025-04-07",
-        daysLeft: 3,
-        read: false,
-      },
-    ]
+    const user = await getUser(request)
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
 
-    return NextResponse.json({ notifications })
+    const { data, error } = await supabaseAdmin
+      .from("notifications")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("is_read", false)
+      .order("created_at", { ascending: false })
+      .limit(20)
+
+    if (error) throw error
+
+    return NextResponse.json({ notifications: data })
   } catch (error) {
-    console.error("Notifications API error:", error)
-    return NextResponse.json({ error: "Failed to fetch notifications" }, { status: 500 })
+    console.error("Notifications GET error:", error)
+    return NextResponse.json(
+      { error: "Failed to fetch notifications" },
+      { status: 500 }
+    )
   }
 }
 
-// Mark notification as read
+// POST /api/notifications — mark notification as read
 export async function POST(request: Request) {
   try {
+    const user = await getUser(request)
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const { notificationId } = await request.json()
 
     if (!notificationId) {
-      return NextResponse.json({ error: "Notification ID is required" }, { status: 400 })
+      return NextResponse.json(
+        { error: "Notification ID is required" },
+        { status: 400 }
+      )
     }
 
-    // In a real app, this would update the notification status in the database
+    const { error } = await supabaseAdmin
+      .from("notifications")
+      .update({ is_read: true })
+      .eq("id", notificationId)
+      .eq("user_id", user.id)
+
+    if (error) throw error
 
     return NextResponse.json({
       success: true,
       message: `Notification ${notificationId} marked as read`,
     })
   } catch (error) {
-    console.error("Notifications API error:", error)
-    return NextResponse.json({ error: "Failed to update notification" }, { status: 500 })
+    console.error("Notifications POST error:", error)
+    return NextResponse.json(
+      { error: "Failed to update notification" },
+      { status: 500 }
+    )
   }
 }
-
