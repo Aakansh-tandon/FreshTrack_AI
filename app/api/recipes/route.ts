@@ -1,100 +1,224 @@
 import { NextResponse } from "next/server"
-import { generateText } from "ai"
-import { openai } from "@ai-sdk/openai"
+import { supabaseAdmin } from "@/lib/supabase"
+import { createClient } from "@supabase/supabase-js"
+
+type RecipePayload = {
+  title: string
+  description?: string
+  prep_time?: string
+  cook_time?: string
+  difficulty?: string
+  ingredients?: string[]
+  instructions?: string[]
+  expiring_items_used?: string[]
+  items_saved_count?: number
+  urgency_score?: number
+  best_match?: boolean
+  rank?: number
+}
+
+async function getUser(request: Request) {
+  const authHeader = request.headers.get("Authorization")
+  if (!authHeader?.startsWith("Bearer ")) return null
+
+  const token = authHeader.replace("Bearer ", "")
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+  const { data: { user }, error } = await supabase.auth.getUser(token)
+  if (error || !user) return null
+  return user
+}
+
+function normalizeRecipe(raw: any): RecipePayload {
+  const expiringUsed = Array.isArray(raw?.expiring_items_used) ? raw.expiring_items_used : []
+
+  return {
+    title: String(raw?.title || "Untitled Recipe"),
+    description: typeof raw?.description === "string" ? raw.description : "",
+    prep_time: typeof raw?.prep_time === "string" ? raw.prep_time : "",
+    cook_time: typeof raw?.cook_time === "string" ? raw.cook_time : "",
+    difficulty: typeof raw?.difficulty === "string" ? raw.difficulty : "",
+    ingredients: Array.isArray(raw?.ingredients) ? raw.ingredients : [],
+    instructions: Array.isArray(raw?.instructions) ? raw.instructions : [],
+    expiring_items_used: expiringUsed,
+    items_saved_count:
+      typeof raw?.items_saved_count === "number"
+        ? raw.items_saved_count
+        : expiringUsed.length,
+    urgency_score: typeof raw?.urgency_score === "number" ? raw.urgency_score : 0,
+  }
+}
+
+function rankRecipes(recipes: RecipePayload[]) {
+  const ranked = [...recipes].sort(
+    (a, b) =>
+      (b.items_saved_count || 0) - (a.items_saved_count || 0) ||
+      (b.urgency_score || 0) - (a.urgency_score || 0)
+  )
+
+  return ranked.map((recipe, index) => ({
+    ...recipe,
+    rank: index + 1,
+    best_match: index === 0,
+  }))
+}
+
+function buildMockRecipe(ingredients: string[], preferences: string[]): RecipePayload {
+  const safeIngredients = ingredients.length > 0 ? ingredients : ["Seasonal Vegetables"]
+  const titleSeed = safeIngredients[0]
+  const preferenceLine = preferences.length
+    ? `Aligned with ${preferences.join(", ")} preferences.`
+    : "A flexible recipe that works with what you have on hand."
+
+  return {
+    title: `${titleSeed} Rescue Bowl`,
+    description: `A simple dish that reduces food waste. ${preferenceLine}`,
+    prep_time: "10 mins",
+    cook_time: "15 mins",
+    difficulty: "Easy",
+    ingredients: [
+      `2 cups ${titleSeed}`,
+      ...safeIngredients.slice(1).map((item) => `1 cup ${item}`),
+      "1 tbsp olive oil",
+      "Salt and pepper to taste",
+    ],
+    instructions: [
+      "Prepare the ingredients by washing and chopping.",
+      "Warm olive oil in a pan over medium heat.",
+      `Add ${titleSeed} and cook for 4 to 5 minutes.`,
+      "Stir in the remaining ingredients and cook until tender.",
+      "Season to taste and serve warm.",
+    ],
+    expiring_items_used: safeIngredients,
+    items_saved_count: safeIngredients.length,
+    urgency_score: 0,
+  }
+}
 
 export async function POST(request: Request) {
   try {
-    const { ingredients, preferences = [] } = await request.json()
-
-    if (!ingredients || !Array.isArray(ingredients) || ingredients.length === 0) {
-      return NextResponse.json({ error: "Ingredients are required and must be an array" }, { status: 400 })
+    const user = await getUser(request)
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Check if OpenAI API key is available
-    const apiKey = process.env.OPENAI_API_KEY
-    if (!apiKey) {
-      console.error("OpenAI API key is missing")
+    const body = await request.json().catch(() => ({}))
+    const ingredients = Array.isArray(body?.ingredients) ? body.ingredients : []
+    const preferences = Array.isArray(body?.preferences) ? body.preferences : []
+    const mode = body?.mode === "auto" || body?.mode === "custom" ? body.mode : "custom"
 
-      // Return a mock recipe for demo purposes when API key is missing
-      return NextResponse.json({
-        success: true,
-        recipe: generateMockRecipe(ingredients, preferences),
+    if (mode === "custom" && ingredients.length === 0) {
+      return NextResponse.json({ error: "Ingredients are required" }, { status: 400 })
+    }
+
+    let inventoryItems: any[] = []
+    if (mode === "auto") {
+      const { data, error } = await supabaseAdmin
+        .from("inventory_items")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_consumed", false)
+        .in("status", ["critical", "expiring_soon"])
+        .order("days_remaining", { ascending: true })
+
+      if (error) throw error
+      inventoryItems = data || []
+
+      if (inventoryItems.length === 0) {
+        return NextResponse.json({ success: true, recipes: [] })
+      }
+    }
+
+    const fastApiUrl = process.env.FASTAPI_URL
+    const useDemo = !fastApiUrl
+
+    let recipeResult: any = null
+
+    if (useDemo) {
+      const sourceIngredients = mode === "auto"
+        ? inventoryItems.map((item) => item.product_name)
+        : ingredients
+      recipeResult = buildMockRecipe(sourceIngredients, preferences)
+    } else if (mode === "auto") {
+      const itemsPayload = inventoryItems.map((item) => ({
+        product_name: item.product_name,
+        category: item.category,
+        days_remaining: item.days_remaining,
+        quantity: item.quantity,
+        urgency_score: item.urgency_score,
+      }))
+
+      const fastApiResponse = await fetch(`${fastApiUrl}/auto-recipe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: itemsPayload }),
       })
+
+      if (!fastApiResponse.ok) {
+        throw new Error(`FastAPI responded with ${fastApiResponse.status}`)
+      }
+
+      const fastApiData = await fastApiResponse.json()
+      recipeResult = fastApiData.recipe
+      if (!recipeResult || recipeResult.error) {
+        return NextResponse.json(
+          { error: recipeResult?.message || "Recipe generation failed" },
+          { status: 502 }
+        )
+      }
+    } else {
+      const fastApiResponse = await fetch(`${fastApiUrl}/custom-recipe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ingredients, preferences }),
+      })
+
+      if (!fastApiResponse.ok) {
+        throw new Error(`FastAPI responded with ${fastApiResponse.status}`)
+      }
+
+      const fastApiData = await fastApiResponse.json()
+      recipeResult = fastApiData.recipe
+      if (!recipeResult || recipeResult.error) {
+        return NextResponse.json(
+          { error: recipeResult?.message || "Recipe generation failed" },
+          { status: 502 }
+        )
+      }
     }
 
-    // Build the prompt for the AI
-    const ingredientsList = ingredients.join(", ")
-    const preferencesText =
-      preferences.length > 0 ? `Consider these dietary preferences: ${preferences.join(", ")}.` : ""
+    const recipesRaw = Array.isArray(recipeResult)
+      ? recipeResult
+      : recipeResult
+        ? [recipeResult]
+        : []
 
-    const prompt = `
-      Create a recipe using some or all of these ingredients: ${ingredientsList}.
-      ${preferencesText}
-      Format the recipe with:
-      1. A creative title
-      2. A brief description
-      3. List of ingredients with quantities
-      4. Step-by-step cooking instructions
-      5. Cooking time and difficulty level
-    `
+    const normalized = recipesRaw.map(normalizeRecipe)
+    const ranked = rankRecipes(normalized)
 
-    // Generate recipe using AI SDK with explicit API key
-    const { text } = await generateText({
-      model: openai("gpt-4o", { apiKey }),
-      prompt: prompt,
-      system:
-        "You are a professional chef specializing in creating delicious recipes from available ingredients. Focus on reducing food waste by using ingredients that are about to expire.",
-    })
+    if (ranked.length > 0) {
+      const insertPayload = ranked.map((recipe) => ({
+        user_id: user.id,
+        title: recipe.title,
+        ingredients_used: recipe.expiring_items_used || [],
+        recipe_markdown: JSON.stringify(recipe),
+        urgency_score: recipe.urgency_score || 0,
+        items_saved: recipe.items_saved_count || 0,
+      }))
 
-    return NextResponse.json({
-      success: true,
-      recipe: text,
-    })
+      const { error: saveError } = await supabaseAdmin
+        .from("recipe_history")
+        .insert(insertPayload)
+
+      if (saveError) throw saveError
+    }
+
+    return NextResponse.json({ success: true, recipes: ranked, demo: useDemo })
   } catch (error) {
     console.error("Recipe generation error:", error)
     return NextResponse.json({ error: "Failed to generate recipe" }, { status: 500 })
   }
-}
-
-// Function to generate a mock recipe when API key is missing
-function generateMockRecipe(ingredients: string[], preferences: string[]): string {
-  const mainIngredient = ingredients[0] || "Chicken"
-  const secondaryIngredients = ingredients.slice(1).join(", ") || "vegetables"
-  const dietaryInfo = preferences.length > 0 ? `(${preferences.join(", ")})` : ""
-
-  return `# ${mainIngredient} Delight ${dietaryInfo}
-
-A delicious and easy-to-prepare dish that makes the most of your ingredients.
-
-## Description
-This recipe transforms ${mainIngredient} into a flavorful meal that's perfect for any occasion. It's designed to use ingredients you already have to reduce food waste.
-
-## Ingredients
-- 2 cups ${mainIngredient}, prepared appropriately
-- 1 tablespoon olive oil
-- 2 cloves garlic, minced
-- 1 onion, diced
-${ingredients
-  .slice(1)
-  .map((ing) => `- 1 cup ${ing}`)
-  .join("\n")}
-- Salt and pepper to taste
-- Fresh herbs for garnish
-
-## Instructions
-1. Prepare all ingredients by washing and cutting them into appropriate sizes.
-2. Heat olive oil in a large pan over medium heat.
-3. Add garlic and onion, sauté until fragrant and translucent.
-4. Add ${mainIngredient} and cook for 5-7 minutes until it starts to brown.
-5. Add ${secondaryIngredients} and continue cooking for another 5 minutes.
-6. Season with salt and pepper to taste.
-7. Garnish with fresh herbs before serving.
-
-## Cooking Time and Difficulty
-- Preparation: 10 minutes
-- Cooking: 15 minutes
-- Difficulty: Easy
-
-Enjoy your meal!`
 }
 

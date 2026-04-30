@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { ScanLine, Camera, X, Check, Edit, ArrowRight, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { createWorker } from "tesseract.js"
-import { supabase } from "@/lib/supabase"
+import { useInventory } from "@/hooks/use-inventory"
 
 export default function ScanPage() {
   const [scanning, setScanning] = useState(false)
@@ -26,6 +26,7 @@ export default function ScanPage() {
   const router = useRouter()
   const { toast } = useToast()
   const [tesseractWorker, setTesseractWorker] = useState<any>(null)
+  const { addItem } = useInventory()
 
   // Initialize Tesseract worker
   useEffect(() => {
@@ -246,35 +247,13 @@ export default function ScanPage() {
       // Format as YYYY-MM-DD for Supabase DATE column
       const formattedDate = expiryDate.toISOString().split("T")[0]
 
-      // Get JWT token
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token
-
-      if (!token) {
-        toast({
-          title: "Error",
-          description: "You must be logged in to add items",
-          variant: "destructive",
-        })
-        return
-      }
-
-      const response = await fetch("/api/inventory", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          product_name: productName,
-          category: productCategory,
-          expiry_date: formattedDate,
-          quantity: 1,
-          ocr_confidence: ocrConfidence,
-        }),
+      await addItem({
+        product_name: productName,
+        category: productCategory,
+        expiry_date: formattedDate,
+        quantity: 1,
+        ocr_confidence: ocrConfidence,
       })
-
-      if (!response.ok) throw new Error("Failed to save item")
 
       toast({
         title: "Product added",

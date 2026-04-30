@@ -16,7 +16,7 @@ import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
-import { supabase } from "@/lib/supabase"
+import { useInventory } from "@/hooks/use-inventory"
 
 // Sample categories
 const categories = [
@@ -39,6 +39,7 @@ export default function AddManualPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
+  const { addItem } = useInventory()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -55,37 +56,15 @@ export default function AddManualPage() {
     setIsSubmitting(true)
 
     try {
-      // Get JWT token
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token
-
-      if (!token) {
-        toast({
-          title: "Error",
-          description: "You must be logged in to add items",
-          variant: "destructive",
-        })
-        return
-      }
-
       // Format date as YYYY-MM-DD for Supabase DATE column
       const formattedDate = expiryDate.toISOString().split("T")[0]
 
-      const response = await fetch("/api/inventory", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          product_name: productName,
-          category,
-          expiry_date: formattedDate,
-          quantity: Number.parseInt(quantity),
-        }),
+      await addItem({
+        product_name: productName,
+        category,
+        expiry_date: formattedDate,
+        quantity: Number.parseInt(quantity),
       })
-
-      if (!response.ok) throw new Error("Failed to save item")
 
       toast({
         title: "Product added",

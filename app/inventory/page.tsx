@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { AnimatePresence, motion } from "framer-motion"
 import { supabase } from "@/lib/supabase"
+import { useInventory } from "@/hooks/use-inventory"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,12 +22,12 @@ import {
 import type { InventoryItem } from "@/types/database"
 
 export default function InventoryPage() {
-  const [inventory, setInventory] = useState<InventoryItem[]>([])
+  const { items: inventory, loading, error, fetchItems, removeItem } = useInventory()
   const [searchQuery, setSearchQuery] = useState("")
   const [filteredInventory, setFilteredInventory] = useState<InventoryItem[]>([])
-  const [isLoading, setIsLoading] = useState(true)
   const { toast } = useToast()
   const router = useRouter()
+  const skeletonCards = Array.from({ length: 4 })
 
   // Get JWT token from Supabase session
   const getToken = useCallback(async () => {
@@ -34,36 +35,10 @@ export default function InventoryPage() {
     return session?.access_token || ""
   }, [])
 
-  // Fetch inventory from Supabase via API route
-  const fetchInventory = useCallback(async () => {
-    try {
-      const token = await getToken()
-      if (!token) return
-
-      const response = await fetch("/api/inventory", {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const data = await response.json()
-
-      if (data.items) {
-        setInventory(data.items)
-      }
-    } catch (error) {
-      console.error("Error fetching inventory:", error)
-      toast({
-        title: "Error",
-        description: "Failed to load inventory",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }, [getToken, toast])
-
   // Load inventory on mount
   useEffect(() => {
-    fetchInventory()
-  }, [fetchInventory])
+    fetchItems()
+  }, [fetchItems])
 
   // Filter inventory when search query or inventory changes
   useEffect(() => {
@@ -83,20 +58,7 @@ export default function InventoryPage() {
   // Handle consumption action (consumed or discarded)
   const handleItemAction = async (id: string, action: "consumed" | "discarded") => {
     try {
-      const token = await getToken()
-      const response = await fetch(`/api/inventory/${id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ action }),
-      })
-
-      if (!response.ok) throw new Error("Failed to update item")
-
-      // Remove from local state
-      setInventory((prev) => prev.filter((item) => item.id !== id))
+      await removeItem(id, action)
 
       toast({
         title: action === "consumed" ? "Item consumed" : "Item discarded",
@@ -209,14 +171,23 @@ export default function InventoryPage() {
     }
   }, [inventory, toast])
 
-  if (isLoading) {
+  if (loading) {
     return (
-      <div className="container mx-auto p-4 max-w-4xl flex items-center justify-center min-h-[50vh]">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-          className="h-8 w-8 border-2 border-coder-primary border-t-transparent rounded-full"
-        />
+      <div className="container mx-auto p-4 max-w-4xl">
+        <div className="grid grid-cols-1 gap-4">
+          {skeletonCards.map((_, index) => (
+            <Card
+              key={`inventory-skeleton-${index}`}
+              className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm animate-pulse"
+            >
+              <CardContent className="p-5 space-y-3">
+                <div className="h-4 bg-muted/40 rounded w-1/2" />
+                <div className="h-3 bg-muted/40 rounded w-3/4" />
+                <div className="h-3 bg-muted/40 rounded w-2/3" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     )
   }
@@ -254,7 +225,42 @@ export default function InventoryPage() {
         </div>
       </motion.div>
 
-      {/* Search bar */}
+      {error && (
+        <Card className="mb-6 border border-coder-primary/50 bg-card/80 backdrop-blur-sm">
+          <CardContent className="p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <p className="text-sm">⚠️ Failed to load data — {error}</p>
+            <Button
+              variant="outline"
+              className="border-coder-primary/50 text-coder-primary hover:bg-coder-primary/10"
+              onClick={fetchItems}
+            >
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!error && inventory.length === 0 && (
+        <Card className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm">
+          <CardContent className="p-10 text-center space-y-4">
+            <div className="text-4xl">\ud83e\udd6b</div>
+            <div>
+              <h2 className="text-xl font-semibold">No items in pantry yet</h2>
+              <p className="text-sm text-muted-foreground">Add your first item to start tracking freshness.</p>
+            </div>
+            <Button
+              className="bg-coder-primary hover:bg-coder-primary/80 text-black"
+              onClick={() => router.push("/scan")}
+            >
+              Scan Your First Item
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!error && inventory.length > 0 && (
+        <>
+          {/* Search bar */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -272,7 +278,7 @@ export default function InventoryPage() {
         </div>
       </motion.div>
 
-      {/* Expiring soon section with alert styling */}
+          {/* Expiring soon section with alert styling */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -339,7 +345,7 @@ export default function InventoryPage() {
         </Card>
       </motion.div>
 
-      {/* Full inventory table */}
+          {/* Full inventory table */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -437,6 +443,8 @@ export default function InventoryPage() {
           </CardContent>
         </Card>
       </motion.div>
+        </>
+      )}
     </div>
   )
 }

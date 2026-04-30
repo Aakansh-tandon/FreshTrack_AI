@@ -1,52 +1,144 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Clock, Utensils, Filter, ChefHat, Plus } from "lucide-react"
+import { supabase } from "@/lib/supabase"
 
-// Sample expiring ingredients
-const expiringIngredients = ["Chicken", "Spinach", "Yogurt", "Bread"]
+type Recipe = {
+  title: string
+  description?: string
+  prep_time?: string
+  cook_time?: string
+  difficulty?: string
+  ingredients?: string[]
+  instructions?: string[]
+  expiring_items_used?: string[]
+  items_saved_count?: number
+  urgency_score?: number
+  best_match?: boolean
+  rank?: number
+  image?: string
+}
 
-// Sample recipe data
-const sampleRecipes = [
-  {
-    id: 1,
-    title: "Chicken & Spinach Salad",
-    description: "A healthy salad with grilled chicken and fresh spinach",
-    ingredients: ["Chicken", "Spinach", "Yogurt", "Olive Oil", "Lemon"],
-    cookingTime: "20 mins",
-    difficulty: "Easy",
-    matchedIngredients: 3,
-    image: "/Grilled-Chicken-and-Spinach-Salad.jpeg?height=200&width=400",
-  },
-  {
-    id: 2,
-    title: "Spinach & Yogurt Smoothie",
-    description: "Refreshing smoothie perfect for breakfast",
-    ingredients: ["Spinach", "Yogurt", "Banana", "Honey", "Almond Milk"],
-    cookingTime: "5 mins",
-    difficulty: "Easy",
-    matchedIngredients: 2,
-    image: "/Banana-Spinach-Smoothie.jpg?height=200&width=400",
-  },
-  {
-    id: 3,
-    title: "Chicken Sandwich",
-    description: "Classic chicken sandwich with fresh ingredients",
-    ingredients: ["Chicken", "Bread", "Lettuce", "Tomato", "Mayo"],
-    cookingTime: "15 mins",
-    difficulty: "Easy",
-    matchedIngredients: 2,
-    image: "/sandwich.jpg?height=200&width=400",
-  },
-]
+const skeletonCards = Array.from({ length: 4 })
 
 export default function RecipesPage() {
-  const [recipes, setRecipes] = useState(sampleRecipes)
+  const [recipes, setRecipes] = useState<Recipe[]>([])
+  const [expiringIngredients, setExpiringIngredients] = useState<string[]>([])
+  const [inventoryCount, setInventoryCount] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
+
+  const loadRecipes = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) throw new Error("Not authenticated")
+
+      const inventoryResponse = await fetch("/api/inventory", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      if (!inventoryResponse.ok) {
+        const errorData = await inventoryResponse.json().catch(() => ({}))
+        throw new Error(errorData.error || "Failed to load inventory")
+      }
+
+      const inventoryData = await inventoryResponse.json()
+      const items = inventoryData.items || []
+      setInventoryCount(items.length)
+
+      const expiring = items
+        .filter((item: any) => item.status === "critical" || item.status === "expiring_soon")
+        .map((item: any) => item.product_name)
+      setExpiringIngredients(expiring)
+
+      const recipesResponse = await fetch("/api/recipes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          ingredients: [],
+          preferences: [],
+          mode: "auto",
+        }),
+      })
+
+      if (!recipesResponse.ok) {
+        const errorData = await recipesResponse.json().catch(() => ({}))
+        throw new Error(errorData.error || "Failed to load recipes")
+      }
+
+      const data = await recipesResponse.json()
+      const returned = Array.isArray(data.recipes)
+        ? data.recipes
+        : data.recipe
+          ? [data.recipe]
+          : []
+      setRecipes(returned)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load data"
+      setError(message)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadRecipes()
+  }, [loadRecipes])
+
+  const bestMatchRecipes = useMemo(() => {
+    return [...recipes].sort((a, b) => {
+      const aBest = a.best_match ? 1 : 0
+      const bBest = b.best_match ? 1 : 0
+      return bBest - aBest || (b.items_saved_count || 0) - (a.items_saved_count || 0)
+    })
+  }, [recipes])
+
+  const quickRecipes = useMemo(() => {
+    return recipes.filter((recipe) => (recipe.difficulty || "").toLowerCase() === "easy")
+  }, [recipes])
+
+  const inventoryEmpty = !isLoading && !error && inventoryCount === 0
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-4 max-w-4xl">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {skeletonCards.map((_, index) => (
+            <Card
+              key={`recipe-skeleton-${index}`}
+              className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm animate-pulse"
+            >
+              <div className="h-48 w-full bg-muted/40" />
+              <CardContent className="py-4 space-y-3">
+                <div className="h-4 bg-muted/40 rounded w-2/3" />
+                <div className="h-3 bg-muted/40 rounded w-full" />
+                <div className="h-3 bg-muted/40 rounded w-5/6" />
+                <div className="flex gap-2">
+                  <div className="h-6 w-24 bg-muted/40 rounded" />
+                  <div className="h-6 w-28 bg-muted/40 rounded" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="container mx-auto p-4 max-w-4xl">
@@ -59,88 +151,146 @@ export default function RecipesPage() {
         </Link>
       </div>
 
-      {/* Expiring ingredients section */}
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle className="text-lg">Using Your Expiring Ingredients</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-2 mb-4">
-            {expiringIngredients.map((ingredient) => (
-              <Badge key={ingredient} variant="secondary">
-                {ingredient}
-              </Badge>
-            ))}
-          </div>
-          <Link href="/recipes/generate">
-            <Button className="w-full">
-              <Plus className="mr-2 h-4 w-4" /> Create Recipe With These Ingredients
+      {error && (
+        <Card className="mb-6 border border-coder-primary/50 bg-card/80 backdrop-blur-sm">
+          <CardContent className="p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <p className="text-sm">⚠️ Failed to load data — {error}</p>
+            <Button
+              variant="outline"
+              className="border-coder-primary/50 text-coder-primary hover:bg-coder-primary/10"
+              onClick={loadRecipes}
+            >
+              Retry
             </Button>
-          </Link>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Recipe suggestions tabs */}
-      <Tabs defaultValue="all">
-        <div className="flex justify-between items-center mb-4">
-          <TabsList>
-            <TabsTrigger value="all">All Recipes</TabsTrigger>
-            <TabsTrigger value="quick">Quick & Easy</TabsTrigger>
-            <TabsTrigger value="best">Best Match</TabsTrigger>
-          </TabsList>
-          <Button variant="outline" size="sm">
-            <Filter className="mr-2 h-4 w-4" /> Filter
-          </Button>
-        </div>
+      {inventoryEmpty && !error && (
+        <Card className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm">
+          <CardContent className="p-10 text-center space-y-4">
+            <div className="text-4xl">\ud83e\udd6b</div>
+            <div>
+              <h2 className="text-xl font-semibold">No items in pantry yet</h2>
+              <p className="text-sm text-muted-foreground">Scan your first item to start generating recipes.</p>
+            </div>
+            <Button
+              className="bg-coder-primary hover:bg-coder-primary/80 text-black"
+              onClick={() => router.push("/scan")}
+            >
+              Scan Your First Item
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
-        <TabsContent value="all" className="mt-0">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {recipes.map((recipe) => (
-              <RecipeCard key={recipe.id} recipe={recipe} />
-            ))}
-          </div>
-        </TabsContent>
+      {!inventoryEmpty && !error && (
+        <>
+          {/* Expiring ingredients section */}
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="text-lg">Using Your Expiring Ingredients</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {expiringIngredients.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No expiring items detected yet.</p>
+                ) : (
+                  expiringIngredients.map((ingredient) => (
+                    <Badge key={ingredient} variant="secondary">
+                      {ingredient}
+                    </Badge>
+                  ))
+                )}
+              </div>
+              <Link href="/recipes/generate">
+                <Button className="w-full">
+                  <Plus className="mr-2 h-4 w-4" /> Create Recipe With These Ingredients
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
 
-        <TabsContent value="quick" className="mt-0">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {recipes
-              .filter((recipe) => recipe.cookingTime.includes("5") || recipe.cookingTime.includes("10"))
-              .map((recipe) => (
-                <RecipeCard key={recipe.id} recipe={recipe} />
-              ))}
-          </div>
-        </TabsContent>
+          {/* Recipe suggestions tabs */}
+          <Tabs defaultValue="all">
+            <div className="flex justify-between items-center mb-4">
+              <TabsList>
+                <TabsTrigger value="all">All Recipes</TabsTrigger>
+                <TabsTrigger value="quick">Quick & Easy</TabsTrigger>
+                <TabsTrigger value="best">Best Match</TabsTrigger>
+              </TabsList>
+              <Button variant="outline" size="sm">
+                <Filter className="mr-2 h-4 w-4" /> Filter
+              </Button>
+            </div>
 
-        <TabsContent value="best" className="mt-0">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {recipes
-              .sort((a, b) => b.matchedIngredients - a.matchedIngredients)
-              .map((recipe) => (
-                <RecipeCard key={recipe.id} recipe={recipe} />
-              ))}
-          </div>
-        </TabsContent>
-      </Tabs>
+            <TabsContent value="all" className="mt-0">
+              <RecipeGrid recipes={recipes} />
+            </TabsContent>
+
+            <TabsContent value="quick" className="mt-0">
+              <RecipeGrid recipes={quickRecipes} />
+            </TabsContent>
+
+            <TabsContent value="best" className="mt-0">
+              <RecipeGrid recipes={bestMatchRecipes} />
+            </TabsContent>
+          </Tabs>
+        </>
+      )}
     </div>
   )
 }
 
-// Recipe card component
-function RecipeCard({ recipe }: { recipe: any }) {
+function RecipeGrid({ recipes }: { recipes: Recipe[] }) {
+  if (recipes.length === 0) {
+    return (
+      <Card className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm">
+        <CardContent className="p-8 text-center text-muted-foreground">
+          No recipes available yet. Try generating a custom recipe.
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {recipes.map((recipe, index) => (
+        <RecipeCard key={`${recipe.title}-${index}`} recipe={recipe} />
+      ))}
+    </div>
+  )
+}
+
+function RecipeCard({ recipe }: { recipe: Recipe }) {
+  const expiringUsed = recipe.expiring_items_used || []
+  const expiringUsedCount = recipe.items_saved_count ?? expiringUsed.length
+  const ingredients = recipe.ingredients || []
+  const timeLabel = recipe.cook_time || recipe.prep_time || "Time not set"
+
+  const isExpiringIngredient = (ingredient: string) => {
+    return expiringUsed.some((item) => ingredient.toLowerCase().includes(item.toLowerCase()))
+  }
+
   return (
     <Card className="overflow-hidden">
       <img src={recipe.image || "/placeholder.svg"} alt={recipe.title} className="w-full h-48 object-cover" />
       <CardHeader className="pb-2">
-        <div className="flex justify-between items-start">
+        <div className="flex justify-between items-start gap-3">
           <CardTitle className="text-lg">{recipe.title}</CardTitle>
-          <Badge variant="secondary">{recipe.matchedIngredients} ingredients match</Badge>
+          <div className="flex flex-col items-end gap-2">
+            <Badge variant="secondary">{ingredients.length} ingredients</Badge>
+            <Badge className="bg-coder-primary text-black">
+              {expiringUsedCount} expiring items used
+            </Badge>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="pb-2">
         <p className="text-muted-foreground text-sm mb-4">{recipe.description}</p>
         <div className="flex flex-wrap gap-2 mb-4">
-          {recipe.ingredients.map((ingredient: string) => (
-            <Badge key={ingredient} variant={expiringIngredients.includes(ingredient) ? "default" : "outline"}>
+          {ingredients.map((ingredient) => (
+            <Badge key={ingredient} variant={isExpiringIngredient(ingredient) ? "default" : "outline"}>
               {ingredient}
             </Badge>
           ))}
@@ -148,11 +298,11 @@ function RecipeCard({ recipe }: { recipe: any }) {
         <div className="flex gap-4 text-sm text-muted-foreground">
           <div className="flex items-center">
             <Clock className="mr-1 h-4 w-4" />
-            {recipe.cookingTime}
+            {timeLabel}
           </div>
           <div className="flex items-center">
             <Utensils className="mr-1 h-4 w-4" />
-            {recipe.difficulty}
+            {recipe.difficulty || "Easy"}
           </div>
         </div>
       </CardContent>

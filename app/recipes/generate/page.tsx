@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, ChefHat, Plus, X, AlertTriangle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { supabase } from "@/lib/supabase"
 
 // Dietary preferences options
 const dietaryOptions = [
@@ -35,9 +36,33 @@ export default function GenerateRecipePage() {
   const [newIngredient, setNewIngredient] = useState("")
   const [preferences, setPreferences] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
-  const [apiKeyMissing, setApiKeyMissing] = useState(false)
+  const [isDemoMode, setIsDemoMode] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
+
+  const formatRecipeToMarkdown = (recipe: any) => {
+    const title = recipe?.title || "Generated Recipe"
+    const description = recipe?.description || ""
+    const ingredients = Array.isArray(recipe?.ingredients) ? recipe.ingredients : []
+    const instructions = Array.isArray(recipe?.instructions) ? recipe.instructions : []
+    const prepTime = recipe?.prep_time ? `Prep: ${recipe.prep_time}` : ""
+    const cookTime = recipe?.cook_time ? `Cook: ${recipe.cook_time}` : ""
+    const difficulty = recipe?.difficulty ? `Difficulty: ${recipe.difficulty}` : ""
+    const timeLine = [prepTime, cookTime, difficulty].filter(Boolean).join(" | ")
+
+    return `# ${title}
+
+${description}
+
+## Ingredients
+${ingredients.map((item: string) => `- ${item}`).join("\n")}
+
+## Instructions
+${instructions.map((step: string, index: number) => `${index + 1}. ${step}`).join("\n")}
+
+## Cooking Time and Difficulty
+${timeLine || "Time not provided"}`
+  }
 
   // Load ingredients from localStorage if available
   useEffect(() => {
@@ -108,53 +133,67 @@ export default function GenerateRecipePage() {
     }
 
     setLoading(true)
-    setApiKeyMissing(false)
+    setIsDemoMode(false)
 
     try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) {
+        toast({
+          title: "Authentication required",
+          description: "Please sign in to generate recipes",
+          variant: "destructive",
+        })
+        return
+      }
+
       const response = await fetch("/api/recipes", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           ingredients: selectedIngredients,
-          preferences: preferences,
+          preferences,
+          mode: "custom",
         }),
       })
 
       if (!response.ok) {
         const errorData = await response.json()
-        if (errorData.error && errorData.error.includes("API key")) {
-          setApiKeyMissing(true)
-          throw new Error("OpenAI API key is missing")
-        }
-        throw new Error("Failed to generate recipe")
+        throw new Error(errorData.error || "Failed to generate recipe")
       }
 
       const data = await response.json()
+      const returned = Array.isArray(data.recipes) ? data.recipes[0] : data.recipe
+
+      if (data.demo) {
+        setIsDemoMode(true)
+        toast({
+          title: "Demo mode",
+          description: "Recipe engine not configured. Using a fallback recipe.",
+          variant: "warning",
+        })
+      }
+
+      if (!returned) {
+        throw new Error("No recipe returned")
+      }
 
       // Store the generated recipe in localStorage for the results page
-      localStorage.setItem("generatedRecipe", data.recipe)
+      localStorage.setItem("generatedRecipe", formatRecipeToMarkdown(returned))
 
       // Redirect to results page
       router.push("/recipes/results")
     } catch (error) {
       console.error("Error generating recipe:", error)
 
-      if (String(error).includes("API key")) {
-        setApiKeyMissing(true)
-        toast({
-          title: "API Key Missing",
-          description: "Using demo mode with limited functionality",
-          variant: "warning",
-        })
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to generate recipe. Please try again.",
-          variant: "destructive",
-        })
-      }
+      toast({
+        title: "Error",
+        description: "Failed to generate recipe. Please try again.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
@@ -167,14 +206,14 @@ export default function GenerateRecipePage() {
         Generate Custom Recipe
       </h1>
 
-      {apiKeyMissing && (
+      {isDemoMode && (
         <Card className="mb-6 border-warning/50 bg-warning/5">
           <CardContent className="p-4 flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-warning mt-0.5 flex-shrink-0" />
             <div>
-              <h3 className="font-medium text-warning mb-1">OpenAI API Key Missing</h3>
+              <h3 className="font-medium text-warning mb-1">Recipe Engine Unavailable</h3>
               <p className="text-sm text-muted-foreground">
-                The application is running in demo mode. Recipe generation will use pre-defined templates instead of AI.
+                The application is running in demo mode. Recipe generation uses a fallback template instead of AI.
               </p>
             </div>
           </CardContent>

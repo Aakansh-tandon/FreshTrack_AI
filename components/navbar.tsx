@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { ScanLine, LayoutGrid, ChefHat, Menu, User, LogOut, Code } from "lucide-react"
+import { ScanLine, LayoutGrid, ChefHat, Menu, User, LogOut, Code, BarChart2 } from "lucide-react"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { useState, useEffect } from "react"
 import NotificationsPopover from "@/components/notifications"
@@ -68,6 +68,12 @@ export default function Navbar() {
       icon: ChefHat,
       requiresAuth: true,
     },
+    {
+      name: "Analytics",
+      path: "/analytics",
+      icon: BarChart2,
+      requiresAuth: true,
+    },
   ]
 
   const handleLogout = async () => {
@@ -81,6 +87,7 @@ export default function Navbar() {
   }
 
   const filteredRoutes = routes.filter((route) => !route.requiresAuth || (route.requiresAuth && isAuthenticated))
+  const mobileRoutes = filteredRoutes.filter((route) => route.path !== "/")
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60">
@@ -223,7 +230,7 @@ export default function Navbar() {
       {isAuthenticated && (
         <div className="md:hidden fixed bottom-0 left-0 z-50 w-full h-16 bg-background/80 backdrop-blur-lg border-t border-border/40">
           <div className="grid h-full grid-cols-4">
-            {filteredRoutes.map((route) => (
+            {mobileRoutes.map((route) => (
               <button
                 key={route.path}
                 onClick={() => router.push(route.path)}

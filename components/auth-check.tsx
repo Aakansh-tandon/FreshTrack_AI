@@ -16,14 +16,15 @@ export default function AuthCheck({ children }: AuthCheckProps) {
   const pathname = usePathname()
 
   useEffect(() => {
+    const publicRoutes = ["/", "/login", "/signup"]
+
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       const isLoggedIn = !!session
       setIsAuthenticated(isLoggedIn)
 
-      const publicRoutes = ["/", "/login", "/signup"]
       if (!isLoggedIn && !publicRoutes.includes(pathname || "")) {
-        router.push("/login")
+        router.replace("/login")
       }
     }
 
@@ -33,9 +34,8 @@ export default function AuthCheck({ children }: AuthCheckProps) {
       (_event, session) => {
         const isLoggedIn = !!session
         setIsAuthenticated(isLoggedIn)
-        const publicRoutes = ["/", "/login", "/signup"]
         if (!isLoggedIn && !publicRoutes.includes(pathname || "")) {
-          router.push("/login")
+          router.replace("/login")
         }
       }
     )
