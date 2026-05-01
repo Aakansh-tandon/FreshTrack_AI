@@ -16,6 +16,21 @@ async function getUser(request: Request) {
   return user
 }
 
+function deriveInventoryMeta(expiryDate: string) {
+  const days_remaining = Math.floor(
+    (new Date(expiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+  )
+  const status = days_remaining < 0
+    ? "expired"
+    : days_remaining <= 3
+      ? "critical"
+      : days_remaining <= 7
+        ? "expiring_soon"
+        : "fresh"
+
+  return { days_remaining, status }
+}
+
 // GET /api/auto-trigger — automatically generate recipe for critical items
 export async function GET(request: Request) {
   try {
@@ -24,16 +39,23 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // 1. Get critical items (days_remaining <= 3)
-    const { data: criticalItems, error: invError } = await supabaseAdmin
+    // 1. Get items and derive freshness metadata in JS
+    const { data: inventoryItems, error: invError } = await supabaseAdmin
       .from("inventory_items")
       .select("*")
       .eq("user_id", user.id)
       .eq("is_consumed", false)
-      .lte("days_remaining", 3)
-      .order("days_remaining", { ascending: true })
+      .order("expiry_date", { ascending: true })
 
     if (invError) throw invError
+
+    const criticalItems = (inventoryItems || [])
+      .map((item) => ({
+        ...item,
+        ...deriveInventoryMeta(item.expiry_date),
+      }))
+      .filter((item) => item.days_remaining <= 3)
+      .sort((a, b) => a.days_remaining - b.days_remaining)
 
     if (!criticalItems || criticalItems.length === 0) {
       return NextResponse.json({

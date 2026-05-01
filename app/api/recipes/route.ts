@@ -97,6 +97,21 @@ function buildMockRecipe(ingredients: string[], preferences: string[]): RecipePa
   }
 }
 
+function deriveInventoryMeta(expiryDate: string) {
+  const days_remaining = Math.floor(
+    (new Date(expiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+  )
+  const status = days_remaining < 0
+    ? "expired"
+    : days_remaining <= 3
+      ? "critical"
+      : days_remaining <= 7
+        ? "expiring_soon"
+        : "fresh"
+
+  return { days_remaining, status }
+}
+
 export async function POST(request: Request) {
   try {
     const user = await getUser(request)
@@ -120,11 +135,16 @@ export async function POST(request: Request) {
         .select("*")
         .eq("user_id", user.id)
         .eq("is_consumed", false)
-        .in("status", ["critical", "expiring_soon"])
-        .order("days_remaining", { ascending: true })
+        .order("expiry_date", { ascending: true })
 
       if (error) throw error
-      inventoryItems = data || []
+      inventoryItems = (data || [])
+        .map((item) => ({
+          ...item,
+          ...deriveInventoryMeta(item.expiry_date),
+        }))
+        .filter((item) => item.status === "critical" || item.status === "expiring_soon")
+        .sort((a, b) => a.days_remaining - b.days_remaining)
 
       if (inventoryItems.length === 0) {
         return NextResponse.json({ success: true, recipes: [] })
