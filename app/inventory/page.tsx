@@ -21,10 +21,34 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type { InventoryItem } from "@/types/database"
 
+type InventoryStatus = "expired" | "critical" | "expiring_soon" | "fresh"
+
+type InventoryViewItem = InventoryItem & {
+  urgency_score?: number
+  status: InventoryStatus
+  days_remaining: number
+}
+
+function deriveInventoryMeta(expiryDate: string) {
+  const days_remaining = Math.floor(
+    (new Date(expiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+  )
+  const status: InventoryStatus = days_remaining < 0
+    ? "expired"
+    : days_remaining <= 3
+      ? "critical"
+      : days_remaining <= 7
+        ? "expiring_soon"
+        : "fresh"
+
+  return { days_remaining, status }
+}
+
 export default function InventoryPage() {
   const { items: inventory, loading, error, fetchItems, removeItem } = useInventory()
   const [searchQuery, setSearchQuery] = useState("")
-  const [filteredInventory, setFilteredInventory] = useState<InventoryItem[]>([])
+  const [scoredInventory, setScoredInventory] = useState<InventoryViewItem[]>([])
+  const [filteredInventory, setFilteredInventory] = useState<InventoryViewItem[]>([])
   const { toast } = useToast()
   const router = useRouter()
   const skeletonCards = Array.from({ length: 4 })
@@ -40,20 +64,98 @@ export default function InventoryPage() {
     fetchItems()
   }, [fetchItems])
 
+  // Rank inventory by urgency score with FastAPI fallback to expiry date sort
+  useEffect(() => {
+    let cancelled = false
+
+    const rankInventory = async () => {
+      const withDerivedFields: InventoryViewItem[] = (inventory || []).map((item) => ({
+        ...item,
+        ...deriveInventoryMeta(item.expiry_date),
+      }))
+
+      const fallbackSorted = [...withDerivedFields].sort(
+        (a, b) => new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime()
+      )
+
+      const apiBase = process.env.NEXT_PUBLIC_API_URL
+      if (!apiBase) {
+        if (!cancelled) setScoredInventory(fallbackSorted)
+        return
+      }
+
+      try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 6000)
+
+        const payload = withDerivedFields.map((item) => ({
+          id: item.id,
+          product_name: item.product_name,
+          category: item.category,
+          quantity: item.quantity,
+          days_remaining: item.days_remaining,
+        }))
+
+        const response = await fetch(`${apiBase}/score-items`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: payload }),
+          signal: controller.signal,
+        })
+
+        clearTimeout(timeoutId)
+
+        if (!response.ok) {
+          throw new Error(`Urgency API responded with ${response.status}`)
+        }
+
+        const data = await response.json()
+        const scoredItems = Array.isArray(data?.items) ? data.items : []
+        const scoreById = new Map<string, number>()
+
+        scoredItems.forEach((item: any) => {
+          if (item?.id && typeof item.urgency_score === "number") {
+            scoreById.set(item.id, item.urgency_score)
+          }
+        })
+
+        const merged = withDerivedFields.map((item) => ({
+          ...item,
+          urgency_score: scoreById.get(item.id),
+        }))
+
+        const sortedByUrgency = [...merged].sort(
+          (a, b) => (b.urgency_score ?? 0) - (a.urgency_score ?? 0)
+        )
+
+        if (!cancelled) setScoredInventory(sortedByUrgency)
+      } catch (rankError) {
+        console.error("Urgency scoring failed, using expiry fallback:", rankError)
+        if (!cancelled) setScoredInventory(fallbackSorted)
+      }
+    }
+
+    rankInventory()
+
+    return () => {
+      cancelled = true
+    }
+  }, [inventory])
+
   // Filter inventory when search query or inventory changes
   useEffect(() => {
     if (!searchQuery) {
-      setFilteredInventory(inventory)
+      setFilteredInventory(scoredInventory)
     } else {
       const query = searchQuery.toLowerCase()
-      const filtered = inventory.filter(
+      const filtered = scoredInventory.filter(
         (item) =>
           item.product_name.toLowerCase().includes(query) ||
           item.category.toLowerCase().includes(query),
       )
       setFilteredInventory(filtered)
     }
-  }, [searchQuery, inventory])
+  }, [searchQuery, scoredInventory])
 
   // Handle consumption action (consumed or discarded)
   const handleItemAction = async (id: string, action: "consumed" | "discarded") => {
@@ -158,7 +260,7 @@ export default function InventoryPage() {
 
   // Show notification for expiring items
   useEffect(() => {
-    const expiringItems = inventory.filter(
+    const expiringItems = scoredInventory.filter(
       (item) => item.days_remaining <= 3 && item.status !== "expired"
     )
 
@@ -169,7 +271,20 @@ export default function InventoryPage() {
         variant: "destructive",
       })
     }
-  }, [inventory, toast])
+  }, [scoredInventory, toast])
+
+  const getUrgencyBadgeClasses = (score?: number) => {
+    if ((score ?? 0) >= 5) return "bg-destructive text-white"
+    if ((score ?? 0) >= 2) return "bg-warning text-black"
+    return "bg-muted text-muted-foreground"
+  }
+
+  const getUrgencyBadgeText = (score?: number) => {
+    const safeScore = (score ?? 0).toFixed(1)
+    if ((score ?? 0) >= 5) return `${safeScore} 🔥`
+    if ((score ?? 0) >= 2) return `${safeScore} ⚠️`
+    return safeScore
+  }
 
   if (loading) {
     return (
@@ -363,6 +478,7 @@ export default function InventoryPage() {
                   <TableHead className="text-coder-primary">Category</TableHead>
                   <TableHead className="text-coder-primary">Expiry Date</TableHead>
                   <TableHead className="text-coder-primary">Status</TableHead>
+                  <TableHead className="text-coder-primary">Urgency</TableHead>
                   <TableHead className="text-right text-coder-primary">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -370,7 +486,7 @@ export default function InventoryPage() {
                 <AnimatePresence>
                   {filteredInventory.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                         {searchQuery ? "No items match your search" : "No items in your inventory"}
                       </TableCell>
                     </TableRow>
@@ -392,6 +508,11 @@ export default function InventoryPage() {
                             className={getBadgeClasses(item.status)}
                           >
                             {getStatusText(item)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={getUrgencyBadgeClasses(item.urgency_score)}>
+                            {getUrgencyBadgeText(item.urgency_score)}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
@@ -421,14 +542,14 @@ export default function InventoryPage() {
                                   className="hover:bg-coder-primary/10 focus:bg-coder-primary/10"
                                 >
                                   <CheckCircle className="mr-2 h-4 w-4 text-coder-primary" />
-                                  Mark as Consumed
+                                  ✅ Mark as Consumed
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onClick={() => handleItemAction(item.id, "discarded")}
                                   className="text-destructive hover:bg-destructive/10 focus:bg-destructive/10"
                                 >
                                   <Trash2 className="mr-2 h-4 w-4" />
-                                  Discard (Expired/Waste)
+                                  🗑️ Discard (Waste)
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>

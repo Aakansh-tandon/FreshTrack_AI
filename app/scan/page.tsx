@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
 import { ScanLine, Camera, X, Check, Edit, ArrowRight, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { createWorker } from "tesseract.js"
@@ -27,6 +28,27 @@ export default function ScanPage() {
   const { toast } = useToast()
   const [tesseractWorker, setTesseractWorker] = useState<any>(null)
   const { addItem } = useInventory()
+
+  const getConfidenceBadge = (confidence: number) => {
+    if (confidence >= 80) {
+      return {
+        className: "bg-coder-primary text-black",
+        text: `✓ High Confidence (${confidence.toFixed(1)}%)`,
+      }
+    }
+
+    if (confidence >= 50) {
+      return {
+        className: "bg-warning text-black",
+        text: `⚠ Medium Confidence (${confidence.toFixed(1)}%) — verify date`,
+      }
+    }
+
+    return {
+      className: "bg-destructive text-white",
+      text: `✗ Low Confidence (${confidence.toFixed(1)}%) — manual entry recommended`,
+    }
+  }
 
   // Initialize Tesseract worker
   useEffect(() => {
@@ -341,10 +363,10 @@ export default function ScanPage() {
             </div>
 
             {ocrConfidence !== null && (
-              <div className="text-xs text-muted-foreground">
-                OCR Confidence: <span className={ocrConfidence >= 80 ? "text-coder-primary" : ocrConfidence >= 50 ? "text-yellow-500" : "text-destructive"}>{ocrConfidence.toFixed(1)}%</span>
-                {" — "}
-                {ocrConfidence >= 80 ? "High" : ocrConfidence >= 50 ? "Medium" : "Low"}
+              <div>
+                <Badge className={getConfidenceBadge(ocrConfidence).className}>
+                  {getConfidenceBadge(ocrConfidence).text}
+                </Badge>
               </div>
             )}
 

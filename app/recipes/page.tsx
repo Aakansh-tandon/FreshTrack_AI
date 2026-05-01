@@ -59,7 +59,12 @@ export default function RecipesPage() {
       setInventoryCount(items.length)
 
       const expiring = items
-        .filter((item: any) => item.status === "critical" || item.status === "expiring_soon")
+        .map((item: any) => ({
+          ...item,
+          days_remaining: Math.floor((new Date(item.expiry_date).getTime() - new Date().getTime()) / 86400000),
+        }))
+        .filter((item: any) => item.days_remaining <= 7)
+        .sort((a: any, b: any) => a.days_remaining - b.days_remaining)
         .map((item: any) => item.product_name)
       setExpiringIngredients(expiring)
 
