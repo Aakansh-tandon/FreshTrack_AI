@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -12,14 +12,121 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Loader2, Save, Shield, Bell, Moon, Sun, Trash2, LogOut } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { supabase } from "@/lib/supabase"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+
+const DEFAULT_PREFERENCES = {
+  autoRecipeNotifications: true,
+  criticalAlertThreshold: 3,
+  categoryUrgencyPreset: "default",
+}
 
 export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState("")
+  const [autoRecipeNotifications, setAutoRecipeNotifications] = useState(true)
+  const [criticalAlertThreshold, setCriticalAlertThreshold] = useState("3")
+  const [categoryUrgencyPreset, setCategoryUrgencyPreset] = useState("default")
   const { toast } = useToast()
   const router = useRouter()
+
+  // Load user preferences on mount
+  useEffect(() => {
+    const loadPreferences = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user?.user_metadata?.preferences) {
+          const prefs = user.user_metadata.preferences
+          setAutoRecipeNotifications(prefs.autoRecipeNotifications ?? DEFAULT_PREFERENCES.autoRecipeNotifications)
+          setCriticalAlertThreshold(String(prefs.criticalAlertThreshold ?? DEFAULT_PREFERENCES.criticalAlertThreshold))
+          setCategoryUrgencyPreset(prefs.categoryUrgencyPreset ?? DEFAULT_PREFERENCES.categoryUrgencyPreset)
+        }
+      } catch (error) {
+        console.error("Error loading preferences:", error)
+      }
+    }
+    loadPreferences()
+  }, [])
+
+  // Save preferences to Supabase user metadata
+  const savePreferences = async () => {
+    try {
+      const newPrefs = {
+        autoRecipeNotifications,
+        criticalAlertThreshold: parseInt(criticalAlertThreshold),
+        categoryUrgencyPreset,
+      }
+
+      await supabase.auth.updateUser({
+        data: { preferences: newPrefs },
+      })
+
+      toast({
+        title: "Saved",
+        description: "Your preferences have been updated",
+      })
+    } catch (error) {
+      console.error("Error saving preferences:", error)
+      toast({
+        title: "Error",
+        description: "Failed to save preferences",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Handle preference changes
+  const handleAutoRecipeChange = async (value: boolean) => {
+    setAutoRecipeNotifications(value)
+    const newPrefs = {
+      autoRecipeNotifications: value,
+      criticalAlertThreshold: parseInt(criticalAlertThreshold),
+      categoryUrgencyPreset,
+    }
+    try {
+      await supabase.auth.updateUser({
+        data: { preferences: newPrefs },
+      })
+      toast({ title: "Saved", description: "Auto-recipe notifications updated" })
+    } catch (error) {
+      console.error("Error updating auto-recipe preference:", error)
+    }
+  }
+
+  const handleThresholdChange = async (value: string) => {
+    setCriticalAlertThreshold(value)
+    const newPrefs = {
+      autoRecipeNotifications,
+      criticalAlertThreshold: parseInt(value),
+      categoryUrgencyPreset,
+    }
+    try {
+      await supabase.auth.updateUser({
+        data: { preferences: newPrefs },
+      })
+      toast({ title: "Saved", description: "Alert threshold updated" })
+    } catch (error) {
+      console.error("Error updating threshold preference:", error)
+    }
+  }
+
+  const handlePresetChange = async (value: string) => {
+    setCategoryUrgencyPreset(value)
+    const newPrefs = {
+      autoRecipeNotifications,
+      criticalAlertThreshold: parseInt(criticalAlertThreshold),
+      categoryUrgencyPreset: value,
+    }
+    try {
+      await supabase.auth.updateUser({
+        data: { preferences: newPrefs },
+      })
+      toast({ title: "Saved", description: "Category urgency preset updated" })
+    } catch (error) {
+      console.error("Error updating preset preference:", error)
+    }
+  }
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -168,11 +275,12 @@ export default function SettingsPage() {
         <TabsContent value="notifications">
           <Card className="border-coder-primary/20 bg-card/80 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle>Notification Settings</CardTitle>
+              <CardTitle>Notification & Preference Settings</CardTitle>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSaveSettings} className="space-y-6">
+              <div className="space-y-6">
                 <div className="space-y-4">
+                  {/* Existing notification settings */}
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
                       <Label htmlFor="expiry-alerts">Expiry Alerts</Label>
@@ -214,20 +322,59 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <Button className="w-full" disabled={isLoading}>
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Bell className="mr-2 h-4 w-4" />
-                      Save Notification Settings
-                    </>
-                  )}
-                </Button>
-              </form>
+                {/* Divider */}
+                <div className="border-t border-border pt-6" />
+
+                {/* New functional preferences */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium">Smart Features</h3>
+
+                  {/* Auto-recipe notifications toggle */}
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="auto-recipe-notifs">Auto-Recipe Notifications</Label>
+                      <p className="text-sm text-muted-foreground">Automatically notify when a recipe is generated for expiring items</p>
+                    </div>
+                    <Switch
+                      id="auto-recipe-notifs"
+                      checked={autoRecipeNotifications}
+                      onCheckedChange={handleAutoRecipeChange}
+                    />
+                  </div>
+
+                  {/* Critical alert threshold dropdown */}
+                  <div className="space-y-2">
+                    <Label htmlFor="critical-threshold">Critical Alert Threshold</Label>
+                    <p className="text-xs text-muted-foreground mb-2">Trigger urgent alerts when items expire within this timeframe</p>
+                    <Select value={criticalAlertThreshold} onValueChange={handleThresholdChange}>
+                      <SelectTrigger id="critical-threshold" className="border-coder-primary/30">
+                        <SelectValue placeholder="Select threshold" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">1 day</SelectItem>
+                        <SelectItem value="3">3 days (default)</SelectItem>
+                        <SelectItem value="7">7 days</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Category urgency preset dropdown */}
+                  <div className="space-y-2">
+                    <Label htmlFor="urgency-preset">Category Urgency Preset</Label>
+                    <p className="text-xs text-muted-foreground mb-2">Adjust urgency scoring weights for your shopping patterns</p>
+                    <Select value={categoryUrgencyPreset} onValueChange={handlePresetChange}>
+                      <SelectTrigger id="urgency-preset" className="border-coder-primary/30">
+                        <SelectValue placeholder="Select preset" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="default">Default (Balanced)</SelectItem>
+                        <SelectItem value="dairy-meat">Mostly Dairy & Meat</SelectItem>
+                        <SelectItem value="frozen">Mostly Frozen</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

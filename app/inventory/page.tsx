@@ -227,9 +227,9 @@ export default function InventoryPage() {
     window.location.href = "/recipes/generate"
   }
 
-  // Auto-trigger recipe generation for critical items
+  // Auto-trigger recipe generation on page mount
   useEffect(() => {
-    const triggerAutoRecipe = async () => {
+    const triggerAutoRecipeOnMount = async () => {
       try {
         const token = await getToken()
         if (!token) return
@@ -241,8 +241,8 @@ export default function InventoryPage() {
 
         if (data.triggered) {
           toast({
-            title: "🍳 Recipe auto-generated!",
-            description: `${data.recipe_title} — uses your expiring items → View Recipes`,
+            title: "🍳 Recipe auto-generated for your expiring items",
+            description: "Tap to view recipes",
             onClick: () => router.push("/recipes"),
           })
         }
@@ -251,10 +251,34 @@ export default function InventoryPage() {
       }
     }
 
-    triggerAutoRecipe()
+    triggerAutoRecipeOnMount()
+  }, [getToken, router, toast])
 
-    // Re-check every 5 minutes
-    const interval = setInterval(triggerAutoRecipe, 5 * 60 * 1000)
+  // Periodic auto-trigger re-check every 5 minutes
+  useEffect(() => {
+    const triggerAutoRecipePeriodic = async () => {
+      try {
+        const token = await getToken()
+        if (!token) return
+
+        const response = await fetch("/api/auto-trigger", {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const data = await response.json()
+
+        if (data.triggered) {
+          toast({
+            title: "🍳 Recipe auto-generated for your expiring items",
+            description: "Tap to view recipes",
+            onClick: () => router.push("/recipes"),
+          })
+        }
+      } catch (error) {
+        console.error("Auto-trigger periodic error:", error)
+      }
+    }
+
+    const interval = setInterval(triggerAutoRecipePeriodic, 5 * 60 * 1000)
     return () => clearInterval(interval)
   }, [getToken, router, toast])
 
