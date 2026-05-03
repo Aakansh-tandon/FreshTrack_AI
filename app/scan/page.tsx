@@ -15,6 +15,7 @@ import { useInventory } from "@/hooks/use-inventory"
 export default function ScanPage() {
   const [scanning, setScanning] = useState(false)
   const [processing, setProcessing] = useState(false)
+  const [aiProcessing, setAiProcessing] = useState(false)
   const [result, setResult] = useState<string | null>(null)
   const [showOptions, setShowOptions] = useState(true)
   const [showProductForm, setShowProductForm] = useState(false)
@@ -22,6 +23,9 @@ export default function ScanPage() {
   const [productCategory, setProductCategory] = useState("other")
   const [capturedImage, setCapturedImage] = useState<string | null>(null)
   const [ocrConfidence, setOcrConfidence] = useState<number | null>(null)
+  const [aiConfidence, setAiConfidence] = useState<number | null>(null)
+  const [aiLabel, setAiLabel] = useState<string | null>(null)
+  const [aiSource, setAiSource] = useState<boolean>(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const router = useRouter()
@@ -29,24 +33,25 @@ export default function ScanPage() {
   const [tesseractWorker, setTesseractWorker] = useState<any>(null)
   const { addItem } = useInventory()
 
-  const getConfidenceBadge = (confidence: number) => {
+  const getConfidenceBadge = (confidence: number, source?: string) => {
+    const sourceLabel = source === "gemini" ? " — Gemini Vision" : ""
     if (confidence >= 80) {
       return {
         className: "bg-coder-primary text-black",
-        text: `✓ High Confidence (${confidence.toFixed(1)}%)`,
+        text: `✓ High Confidence (${confidence.toFixed(1)}%)${sourceLabel}`,
       }
     }
 
     if (confidence >= 50) {
       return {
         className: "bg-warning text-black",
-        text: `⚠ Medium Confidence (${confidence.toFixed(1)}%) — verify date`,
+        text: `⚠ Medium Confidence (${confidence.toFixed(1)}%) — verify date${sourceLabel}`,
       }
     }
 
     return {
       className: "bg-destructive text-white",
-      text: `✗ Low Confidence (${confidence.toFixed(1)}%) — manual entry recommended`,
+      text: `✗ Low Confidence (${confidence.toFixed(1)}%) — manual entry recommended${sourceLabel}`,
     }
   }
 
@@ -135,6 +140,86 @@ export default function ScanPage() {
         // Process the image with Tesseract
         processImage(imageData)
       }
+    }
+  }
+
+  // Capture frame and process with Gemini AI
+  const captureFrameForAI = async () => {
+    if (videoRef.current && canvasRef.current && scanning) {
+      const video = videoRef.current
+      const canvas = canvasRef.current
+      const context = canvas.getContext("2d")
+
+      if (context) {
+        // Set canvas dimensions to match video
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+
+        // Draw the current video frame to the canvas
+        context.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+        // Convert canvas to data URL
+        const imageData = canvas.toDataURL("image/png")
+        setCapturedImage(imageData)
+
+        // Process the image with Gemini AI
+        await processImageWithAI(imageData)
+      }
+    }
+  }
+
+  // Process image with Gemini AI
+  const processImageWithAI = async (imageData: string) => {
+    setAiProcessing(true)
+    try {
+      const response = await fetch("/api/scan-ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: imageData }),
+      })
+
+      const data = await response.json()
+
+      if (response.status === 429) {
+        // Rate limit hit - fallback to Tesseract
+        toast({
+          title: "AI scanning limit reached",
+          description: "Switched to Quick Scan mode",
+          variant: "warning",
+        })
+        // Auto-trigger Tesseract scan
+        await processImage(imageData)
+        setAiProcessing(false)
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || "AI scanning failed")
+      }
+
+      if (data.date) {
+        setResult(data.date)
+        setAiConfidence(data.confidence)
+        setAiLabel(data.label)
+        setAiSource(true)
+        stopScanning()
+        setShowProductForm(true)
+      } else {
+        toast({
+          title: "No date detected",
+          description: "AI couldn't find an expiry date. Try Quick Scan or enter manually.",
+          variant: "warning",
+        })
+      }
+    } catch (error) {
+      console.error("AI scan error:", error)
+      toast({
+        title: "AI Scan failed",
+        description: "Try Quick Scan or manual entry",
+        variant: "destructive",
+      })
+    } finally {
+      setAiProcessing(false)
     }
   }
 
@@ -274,7 +359,7 @@ export default function ScanPage() {
         category: productCategory,
         expiry_date: formattedDate,
         quantity: 1,
-        ocr_confidence: ocrConfidence,
+        ocr_confidence: aiSource ? aiConfidence : ocrConfidence,
       })
 
       toast({
@@ -324,9 +409,18 @@ export default function ScanPage() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">Use your camera to scan the expiry date from a product</p>
-              <Button className="w-full mt-4">
-                Start Camera <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
+              <div className="flex gap-2 mt-4">
+                <Button className="flex-1" onClick={startScanning}>
+                  ⚡ Quick Scan (OCR) <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+                <Button 
+                  className="flex-1 border-coder-secondary text-coder-secondary hover:bg-coder-secondary/10" 
+                  variant="outline"
+                  onClick={startScanning}
+                >
+                  🤖 AI Scan (Gemini) <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
@@ -362,13 +456,20 @@ export default function ScanPage() {
               <Input id="scanned-date" value={result || ""} readOnly className="bg-muted" />
             </div>
 
-            {ocrConfidence !== null && (
-              <div>
+            <div className="space-y-2">
+              {aiSource && aiConfidence !== null ? (
+                <>
+                  <Badge className={getConfidenceBadge(aiConfidence, "gemini").className}>
+                    {getConfidenceBadge(aiConfidence, "gemini").text}
+                  </Badge>
+                  {aiLabel && <p className="text-xs text-muted-foreground">Label: {aiLabel}</p>}
+                </>
+              ) : ocrConfidence !== null ? (
                 <Badge className={getConfidenceBadge(ocrConfidence).className}>
                   {getConfidenceBadge(ocrConfidence).text}
                 </Badge>
-              </div>
-            )}
+              ) : null}
+            </div>
 
             <div>
               <Label htmlFor="product-name">Product Name</Label>
@@ -450,6 +551,9 @@ export default function ScanPage() {
                 setShowProductForm(false)
                 setShowOptions(true)
                 setOcrConfidence(null)
+                setAiConfidence(null)
+                setAiLabel(null)
+                setAiSource(false)
               }}
               className="flex-1"
             >
@@ -475,10 +579,25 @@ export default function ScanPage() {
             >
               <X className="mr-2 h-4 w-4" /> Cancel
             </Button>
-            <Button onClick={captureFrame} className="flex-1" disabled={processing}>
-              {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Camera className="mr-2 h-4 w-4" />}
-              Capture
-            </Button>
+            <div className="flex gap-2 flex-1">
+              <Button 
+                onClick={captureFrame} 
+                className="flex-1" 
+                disabled={processing || aiProcessing}
+              >
+                {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Camera className="mr-2 h-4 w-4" />}
+                Quick Scan
+              </Button>
+              <Button 
+                onClick={captureFrameForAI} 
+                className="flex-1 border-coder-secondary text-coder-secondary hover:bg-coder-secondary/10"
+                variant="outline"
+                disabled={processing || aiProcessing}
+              >
+                {aiProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Camera className="mr-2 h-4 w-4" />}
+                AI Scan
+              </Button>
+            </div>
           </>
         ) : null}
       </div>
