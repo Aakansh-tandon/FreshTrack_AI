@@ -236,7 +236,7 @@ export default function AnalyticsPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <MetricCard
           title="Items Saved"
           value={analytics?.items_saved_this_week ?? 0}
@@ -297,7 +297,7 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
 
-        <Card className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm">
+        <Card className="hidden md:block border border-coder-primary/20 bg-card/80 backdrop-blur-sm">
           <CardHeader>
             <CardTitle className="text-lg text-coder-primary">Category Breakdown</CardTitle>
           </CardHeader>
@@ -333,7 +333,7 @@ export default function AnalyticsPage() {
               <thead>
                 <tr className="border-b border-border/40 text-left text-muted-foreground">
                   <th className="py-3 pr-4 font-medium">Item</th>
-                  <th className="py-3 pr-4 font-medium">Category</th>
+                  <th className="hidden md:table-cell py-3 pr-4 font-medium">Category</th>
                   <th className="py-3 pr-4 font-medium">Action</th>
                   <th className="py-3 pr-4 font-medium">Date</th>
                 </tr>
@@ -342,7 +342,7 @@ export default function AnalyticsPage() {
                 {logs.map((log) => (
                   <tr key={log.id} className="border-b border-border/30 last:border-b-0">
                     <td className="py-3 pr-4 font-medium">{log.product_name}</td>
-                    <td className="py-3 pr-4 text-muted-foreground">{log.category}</td>
+                    <td className="hidden md:table-cell py-3 pr-4 text-muted-foreground">{log.category}</td>
                     <td className="py-3 pr-4">
                       <ActionBadge action={log.action} />
                     </td>

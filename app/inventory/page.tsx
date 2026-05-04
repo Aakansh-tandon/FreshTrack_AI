@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ScanLine, Plus, ChefHat, AlertTriangle, Search, MoreVertical, CheckCircle, Trash2 } from "lucide-react"
+import { ScanLine, Plus, ChefHat, AlertTriangle, Search, MoreVertical, CheckCircle, Trash2, ChevronDown, ChevronUp } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
@@ -49,6 +49,7 @@ export default function InventoryPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [scoredInventory, setScoredInventory] = useState<InventoryViewItem[]>([])
   const [filteredInventory, setFilteredInventory] = useState<InventoryViewItem[]>([])
+  const [expiringCollapsed, setExpiringCollapsed] = useState(false)
   const { toast } = useToast()
   const router = useRouter()
   const skeletonCards = Array.from({ length: 4 })
@@ -86,7 +87,7 @@ export default function InventoryPage() {
 
       try {
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 6000)
+        const timeoutId = setTimeout(() => controller.abort(), 30000)
 
         const payload = withDerivedFields.map((item) => ({
           id: item.id,
@@ -200,6 +201,19 @@ export default function InventoryPage() {
         return "Expired"
       case "critical":
         return `${item.days_remaining} day${item.days_remaining === 1 ? "" : "s"} left`
+      case "expiring_soon":
+        return "Expiring Soon"
+      default:
+        return "Fresh"
+    }
+  }
+
+  const getStatusLabel = (status: InventoryStatus) => {
+    switch (status) {
+      case "expired":
+        return "Expired"
+      case "critical":
+        return "Critical"
       case "expiring_soon":
         return "Expiring Soon"
       default:
@@ -337,26 +351,26 @@ export default function InventoryPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="flex justify-between items-center mb-6 relative z-10"
+        className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-6 relative z-10"
       >
-        <h1 className="text-2xl font-bold bg-gradient-to-r from-coder-primary to-coder-accent bg-clip-text text-transparent">
+        <h1 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-coder-primary to-coder-accent bg-clip-text text-transparent">
           Your Food Inventory
         </h1>
-        <div className="flex gap-2">
-          <Link href="/scan">
+        <div className="flex w-full md:w-auto gap-2 flex-nowrap">
+          <Link href="/scan" className="flex-1 md:flex-none">
             <Button
               variant="outline"
               size="sm"
-              className="border-coder-primary/50 text-coder-primary hover:bg-coder-primary/10"
+              className="border-coder-primary/50 text-coder-primary hover:bg-coder-primary/10 text-sm px-3 py-2 md:px-4 md:py-2 whitespace-nowrap w-full"
             >
               <ScanLine className="mr-2 h-4 w-4" /> Scan New
             </Button>
           </Link>
-          <Link href="/add-manual">
+          <Link href="/add-manual" className="flex-1 md:flex-none">
             <Button
               variant="outline"
               size="sm"
-              className="border-coder-accent/50 text-coder-accent hover:bg-coder-accent/10"
+              className="border-coder-accent/50 text-coder-accent hover:bg-coder-accent/10 text-sm px-3 py-2 md:px-4 md:py-2 whitespace-nowrap w-full"
             >
               <Plus className="mr-2 h-4 w-4" /> Add Manually
             </Button>
@@ -412,7 +426,7 @@ export default function InventoryPage() {
             placeholder="Search inventory by name or category..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 border-coder-primary/30 focus:border-coder-primary"
+            className="pl-10 border-coder-primary/30 focus:border-coder-primary w-full text-sm md:text-base"
           />
         </div>
       </motion.div>
@@ -425,13 +439,25 @@ export default function InventoryPage() {
       >
         <Card className="mb-8 border-destructive/50 bg-card/80 backdrop-blur-sm overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-destructive/10 to-transparent"></div>
-          <CardHeader className="bg-destructive/5 relative">
-            <CardTitle className="text-lg flex items-center text-destructive">
-              <AlertTriangle className="mr-2 h-5 w-5 text-destructive" />
-              Expiring Soon - Urgent Attention Required
-            </CardTitle>
+          <CardHeader className="bg-destructive/5 relative p-3 md:p-6">
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-base md:text-lg flex items-center text-destructive">
+                <AlertTriangle className="mr-2 h-4 w-4 md:h-5 md:w-5 text-destructive" />
+                Expiring Soon - Urgent Attention Required
+              </CardTitle>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="md:hidden text-destructive hover:bg-destructive/10"
+                onClick={() => setExpiringCollapsed((prev) => !prev)}
+                aria-label={expiringCollapsed ? "Expand expiring items" : "Collapse expiring items"}
+              >
+                {expiringCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+              </Button>
+            </div>
           </CardHeader>
-          <CardContent className="p-4 relative">
+          <CardContent className={`p-3 md:p-6 relative ${expiringCollapsed ? "hidden md:block" : ""}`}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <AnimatePresence>
                 {filteredInventory
@@ -494,9 +520,82 @@ export default function InventoryPage() {
           <CardHeader>
             <CardTitle className="text-lg text-coder-primary">All Items</CardTitle>
           </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
+          <CardContent className="space-y-3 pb-24 md:pb-6">
+            <div className="md:hidden">
+              {filteredInventory.length === 0 ? (
+                <div className="text-center py-6 text-sm text-muted-foreground">
+                  {searchQuery ? "No items match your search" : "No items in your inventory"}
+                </div>
+              ) : (
+                filteredInventory.map((item) => {
+                  const statusLabel = getStatusLabel(item.status)
+                  const daysLabel = item.days_remaining < 0
+                    ? `${item.days_remaining} days`
+                    : `${item.days_remaining} days left`
+                  const daysClass = item.days_remaining < 0 ? "text-destructive" : "text-muted-foreground"
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="bg-card/80 backdrop-blur-sm rounded-xl p-4 mb-3 border border-coder-primary/20"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="font-medium truncate">{item.product_name}</div>
+                        <Badge variant={getBadgeVariant(item.status)} className={getBadgeClasses(item.status)}>
+                          {statusLabel}
+                        </Badge>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-sm">
+                        <Badge variant="secondary" className="bg-muted/60 text-muted-foreground">
+                          {item.category}
+                        </Badge>
+                        <span className="text-muted-foreground">
+                          {new Date(item.expiry_date).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className={`mt-1 text-xs ${daysClass}`}>
+                        {daysLabel}
+                      </div>
+                      <div className="mt-3 flex items-center justify-between">
+                        <Badge className={getUrgencyBadgeClasses(item.urgency_score)}>
+                          {getUrgencyBadgeText(item.urgency_score)}
+                        </Badge>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="hover:bg-destructive/10 hover:text-destructive"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="border-coder-primary/20 bg-card/90 backdrop-blur-md">
+                            <DropdownMenuItem
+                              onClick={() => handleItemAction(item.id, "consumed")}
+                              className="hover:bg-coder-primary/10 focus:bg-coder-primary/10 py-3 md:py-2 min-h-[44px] md:min-h-0"
+                            >
+                              <CheckCircle className="mr-2 h-4 w-4 text-coder-primary" />
+                              ✅ Mark as Consumed
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleItemAction(item.id, "discarded")}
+                              className="text-destructive hover:bg-destructive/10 focus:bg-destructive/10 py-3 md:py-2 min-h-[44px] md:min-h-0"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              🗑️ Discard (Waste)
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader className="hidden md:table-header-group">
                 <TableRow className="border-coder-primary/20">
                   <TableHead className="text-coder-primary">Item</TableHead>
                   <TableHead className="text-coder-primary">Category</TableHead>
@@ -505,86 +604,87 @@ export default function InventoryPage() {
                   <TableHead className="text-coder-primary">Urgency</TableHead>
                   <TableHead className="text-right text-coder-primary">Actions</TableHead>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                <AnimatePresence>
-                  {filteredInventory.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                        {searchQuery ? "No items match your search" : "No items in your inventory"}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredInventory.map((item, index) => (
-                      <motion.tr
-                        key={item.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.3, delay: 0.1 + index * 0.05 }}
-                        className={`border-b border-border/40 hover:bg-primary/5`}
-                      >
-                        <TableCell className="font-medium">{item.product_name}</TableCell>
-                        <TableCell>{item.category}</TableCell>
-                        <TableCell>{new Date(item.expiry_date).toLocaleDateString()}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={getBadgeVariant(item.status)}
-                            className={getBadgeClasses(item.status)}
-                          >
-                            {getStatusText(item)}
-                          </Badge>
+                </TableHeader>
+                <TableBody>
+                  <AnimatePresence>
+                    {filteredInventory.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          {searchQuery ? "No items match your search" : "No items in your inventory"}
                         </TableCell>
-                        <TableCell>
-                          <Badge className={getUrgencyBadgeClasses(item.urgency_score)}>
-                            {getUrgencyBadgeText(item.urgency_score)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="Find recipes"
-                              className="hover:bg-coder-primary/10 hover:text-coder-primary"
-                              onClick={() => findRecipesForItem(item.product_name)}
+                      </TableRow>
+                    ) : (
+                      filteredInventory.map((item, index) => (
+                        <motion.tr
+                          key={item.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.3, delay: 0.1 + index * 0.05 }}
+                          className={`border-b border-border/40 hover:bg-primary/5`}
+                        >
+                          <TableCell className="font-medium">{item.product_name}</TableCell>
+                          <TableCell>{item.category}</TableCell>
+                          <TableCell>{new Date(item.expiry_date).toLocaleDateString()}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={getBadgeVariant(item.status)}
+                              className={getBadgeClasses(item.status)}
                             >
-                              <ChefHat className="h-4 w-4" />
-                            </Button>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="hover:bg-destructive/10 hover:text-destructive"
-                                >
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="border-coder-primary/20 bg-card/90 backdrop-blur-md">
-                                <DropdownMenuItem
-                                  onClick={() => handleItemAction(item.id, "consumed")}
-                                  className="hover:bg-coder-primary/10 focus:bg-coder-primary/10"
-                                >
-                                  <CheckCircle className="mr-2 h-4 w-4 text-coder-primary" />
-                                  ✅ Mark as Consumed
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => handleItemAction(item.id, "discarded")}
-                                  className="text-destructive hover:bg-destructive/10 focus:bg-destructive/10"
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  🗑️ Discard (Waste)
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </TableCell>
-                      </motion.tr>
-                    ))
-                  )}
-                </AnimatePresence>
-              </TableBody>
-            </Table>
+                              {getStatusText(item)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getUrgencyBadgeClasses(item.urgency_score)}>
+                              {getUrgencyBadgeText(item.urgency_score)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Find recipes"
+                                className="hover:bg-coder-primary/10 hover:text-coder-primary"
+                                onClick={() => findRecipesForItem(item.product_name)}
+                              >
+                                <ChefHat className="h-4 w-4" />
+                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="hover:bg-destructive/10 hover:text-destructive"
+                                  >
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="border-coder-primary/20 bg-card/90 backdrop-blur-md">
+                                  <DropdownMenuItem
+                                    onClick={() => handleItemAction(item.id, "consumed")}
+                                    className="hover:bg-coder-primary/10 focus:bg-coder-primary/10 py-3 md:py-2 min-h-[44px] md:min-h-0"
+                                  >
+                                    <CheckCircle className="mr-2 h-4 w-4 text-coder-primary" />
+                                    ✅ Mark as Consumed
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => handleItemAction(item.id, "discarded")}
+                                    className="text-destructive hover:bg-destructive/10 focus:bg-destructive/10 py-3 md:py-2 min-h-[44px] md:min-h-0"
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    🗑️ Discard (Waste)
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableCell>
+                        </motion.tr>
+                      ))
+                    )}
+                  </AnimatePresence>
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       </motion.div>

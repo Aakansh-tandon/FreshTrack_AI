@@ -147,10 +147,10 @@ export default function RecipesPage() {
 
   return (
     <div className="container mx-auto p-4 max-w-4xl">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold bg-gradient-to-r from-coder-primary to-coder-accent bg-clip-text text-transparent">Recipe Suggestions</h1>
-        <Link href="/recipes/generate">
-          <Button>
+        <Link href="/recipes/generate" className="w-full md:w-auto">
+          <Button className="w-full md:w-auto">
             <ChefHat className="mr-2 h-4 w-4" /> Generate Custom Recipe
           </Button>
         </Link>
@@ -278,12 +278,12 @@ function RecipeCard({ recipe }: { recipe: Recipe }) {
   }
 
   return (
-    <Card className="overflow-hidden">
-      <img src={recipe.image || "/placeholder.svg"} alt={recipe.title} className="w-full h-48 object-cover" />
+    <Card className="overflow-hidden w-full">
+      <img src={recipe.image || "/placeholder.svg"} alt={recipe.title} className="w-full h-32 md:h-48 object-cover" />
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start gap-3">
           <CardTitle className="text-lg">{recipe.title}</CardTitle>
-          <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-wrap gap-2 justify-end md:flex-col md:items-end">
             <Badge variant="secondary">{ingredients.length} ingredients</Badge>
             <Badge className="bg-coder-primary text-black">
               {expiringUsedCount} expiring items used
