@@ -299,16 +299,22 @@ export default function AnalyticsPage() {
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
 
-        <Card className="hidden md:block border border-coder-primary/20 bg-card/80 backdrop-blur-sm">
+        <Card className="hidden md:block border border-coder-primary/20 bg-card/80 backdrop-blur-sm overflow-hidden">
           <CardHeader>
             <CardTitle className="text-lg text-coder-primary">Category Breakdown</CardTitle>
           </CardHeader>
-          <CardContent className="h-[340px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barData}>
+          <CardContent className="h-[250px] md:h-[340px] w-full overflow-hidden" style={{ minWidth: 0 }}>
+            {barData.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-muted-foreground text-center">
+                No category data available
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={barData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
                 <XAxis dataKey="name" stroke="#94a3b8" />
                 <YAxis stroke="#94a3b8" />
