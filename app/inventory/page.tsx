@@ -30,8 +30,12 @@ type InventoryViewItem = InventoryItem & {
 }
 
 function deriveInventoryMeta(expiryDate: string) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const expDate = new Date(expiryDate)
+  expDate.setHours(0, 0, 0, 0)
   const days_remaining = Math.floor(
-    (new Date(expiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+    (expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
   )
   const status: InventoryStatus = days_remaining < 0
     ? "expired"
@@ -195,44 +199,21 @@ export default function InventoryPage() {
   }
 
   // Status display text
-  const getStatusText = (item: InventoryItem) => {
-    switch (item.status) {
-      case "expired":
-        return "Expired"
-      case "critical":
-        return `${item.days_remaining} day${item.days_remaining === 1 ? "" : "s"} left`
-      case "expiring_soon":
-        return "Expiring Soon"
-      default:
-        return "Fresh"
-    }
-  }
-
-  const getStatusLabel = (status: InventoryStatus) => {
-    switch (status) {
-      case "expired":
-        return "Expired"
-      case "critical":
-        return "Critical"
-      case "expiring_soon":
-        return "Expiring Soon"
-      default:
-        return "Fresh"
-    }
+  const getStatusText = (item: InventoryViewItem) => {
+    if (item.days_remaining < 0) return "Expired"
+    if (item.days_remaining === 0) return "Expires Today"
+    if (item.days_remaining === 1) return "1 day left"
+    return `${item.days_remaining} days left`
   }
 
   // Badge extra classes
-  const getBadgeClasses = (status: string) => {
-    switch (status) {
-      case "expired":
-        return "bg-destructive text-white"
-      case "critical":
-        return "bg-coder-primary text-black animate-pulse"
-      case "expiring_soon":
-        return "bg-warning text-black"
-      default:
-        return "bg-green-600 text-white"
-    }
+  const getBadgeClasses = (item: InventoryViewItem) => {
+    if (item.days_remaining < 0) return "bg-destructive text-white"
+    if (item.days_remaining === 0) return "bg-destructive text-white animate-pulse"
+    if (item.days_remaining === 1) return "bg-orange-500 text-white"
+    if (item.days_remaining <= 3) return "bg-coder-primary text-black animate-pulse"
+    if (item.days_remaining <= 7) return "bg-warning text-black"
+    return "bg-green-600 text-white"
   }
 
   // Find recipes for a specific item
@@ -324,14 +305,17 @@ export default function InventoryPage() {
     return safeScore
   }
 
+  const activeInventory = filteredInventory.filter((item) => item.days_remaining >= 0)
+  const expiredInventory = filteredInventory.filter((item) => item.days_remaining < 0)
+
   if (loading) {
     return (
-      <div className="container mx-auto p-4 max-w-4xl">
+      <div className="container mx-auto px-4 md:px-6 lg:px-8 py-4 max-w-4xl">
         <div className="grid grid-cols-1 gap-4">
           {skeletonCards.map((_, index) => (
             <Card
               key={`inventory-skeleton-${index}`}
-              className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm animate-pulse"
+              className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm animate-pulse overflow-hidden"
             >
               <CardContent className="p-5 space-y-3">
                 <div className="h-4 bg-muted/40 rounded w-1/2" />
@@ -346,14 +330,14 @@ export default function InventoryPage() {
   }
 
   return (
-    <div className="container mx-auto p-4 max-w-4xl relative">
+    <div className="container mx-auto px-4 md:px-6 lg:px-8 py-4 max-w-4xl relative">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
         className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-6 relative z-10"
       >
-        <h1 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-coder-primary to-coder-accent bg-clip-text text-transparent">
+        <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-coder-primary to-coder-accent bg-clip-text text-transparent">
           Your Food Inventory
         </h1>
         <div className="flex w-full md:w-auto gap-2 flex-nowrap">
@@ -361,7 +345,7 @@ export default function InventoryPage() {
             <Button
               variant="outline"
               size="sm"
-              className="border-coder-primary/50 text-coder-primary hover:bg-coder-primary/10 text-sm px-3 py-2 md:px-4 md:py-2 whitespace-nowrap w-full"
+              className="border-coder-primary/50 text-coder-primary hover:bg-coder-primary/10 text-sm px-3 py-2 md:px-4 md:py-2 whitespace-nowrap w-full min-h-[44px]"
             >
               <ScanLine className="mr-2 h-4 w-4" /> Scan New
             </Button>
@@ -370,7 +354,7 @@ export default function InventoryPage() {
             <Button
               variant="outline"
               size="sm"
-              className="border-coder-accent/50 text-coder-accent hover:bg-coder-accent/10 text-sm px-3 py-2 md:px-4 md:py-2 whitespace-nowrap w-full"
+              className="border-coder-accent/50 text-coder-accent hover:bg-coder-accent/10 text-sm px-3 py-2 md:px-4 md:py-2 whitespace-nowrap w-full min-h-[44px]"
             >
               <Plus className="mr-2 h-4 w-4" /> Add Manually
             </Button>
@@ -449,7 +433,7 @@ export default function InventoryPage() {
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="md:hidden text-destructive hover:bg-destructive/10"
+                className="md:hidden text-destructive hover:bg-destructive/10 min-h-[44px] min-w-[44px]"
                 onClick={() => setExpiringCollapsed((prev) => !prev)}
                 aria-label={expiringCollapsed ? "Expand expiring items" : "Collapse expiring items"}
               >
@@ -461,7 +445,7 @@ export default function InventoryPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <AnimatePresence>
                 {filteredInventory
-                  .filter((item) => item.days_remaining <= 3)
+                  .filter((item) => item.days_remaining >= 0 && item.days_remaining <= 3)
                   .map((item, index) => (
                     <motion.div
                       key={item.id}
@@ -480,18 +464,18 @@ export default function InventoryPage() {
                               Expires: {new Date(item.expiry_date).toLocaleDateString()}
                             </p>
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 items-center">
                             <Badge
                               variant={getBadgeVariant(item.status)}
-                              className={`${item.days_remaining <= 2 ? "bg-destructive text-white" : "bg-warning text-black"} animate-pulse`}
+                              className={getBadgeClasses(item)}
                             >
-                              {item.days_remaining} days left
+                              {getStatusText(item)}
                             </Badge>
                             <Button
                               variant="ghost"
                               size="icon"
                               title="Find recipes"
-                              className="hover:bg-coder-primary/10 hover:text-coder-primary"
+                              className="hover:bg-coder-primary/10 hover:text-coder-primary min-h-[44px] min-w-[44px]"
                               onClick={() => findRecipesForItem(item.product_name)}
                             >
                               <ChefHat className="h-4 w-4" />
@@ -502,7 +486,7 @@ export default function InventoryPage() {
                     </motion.div>
                   ))}
               </AnimatePresence>
-              {filteredInventory.filter((item) => item.days_remaining <= 3).length === 0 && (
+              {filteredInventory.filter((item) => item.days_remaining >= 0 && item.days_remaining <= 3).length === 0 && (
                 <p className="text-muted-foreground col-span-2 text-center py-4">No items expiring soon</p>
               )}
             </div>
@@ -522,27 +506,21 @@ export default function InventoryPage() {
           </CardHeader>
           <CardContent className="space-y-3 pb-24 md:pb-6">
             <div className="md:hidden">
-              {filteredInventory.length === 0 ? (
+              {activeInventory.length === 0 ? (
                 <div className="text-center py-6 text-sm text-muted-foreground">
-                  {searchQuery ? "No items match your search" : "No items in your inventory"}
+                  {searchQuery ? "No active items match your search" : "No active items in your inventory"}
                 </div>
               ) : (
-                filteredInventory.map((item) => {
-                  const statusLabel = getStatusLabel(item.status)
-                  const daysLabel = item.days_remaining < 0
-                    ? `${item.days_remaining} days`
-                    : `${item.days_remaining} days left`
-                  const daysClass = item.days_remaining < 0 ? "text-destructive" : "text-muted-foreground"
-
+                activeInventory.map((item) => {
                   return (
                     <div
                       key={item.id}
-                      className="bg-card/80 backdrop-blur-sm rounded-xl p-4 mb-3 border border-coder-primary/20"
+                      className="bg-card/80 backdrop-blur-sm rounded-xl p-4 mb-3 border border-coder-primary/20 overflow-hidden"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="font-medium truncate">{item.product_name}</div>
-                        <Badge variant={getBadgeVariant(item.status)} className={getBadgeClasses(item.status)}>
-                          {statusLabel}
+                        <Badge variant={getBadgeVariant(item.status)} className={getBadgeClasses(item)}>
+                          {getStatusText(item)}
                         </Badge>
                       </div>
                       <div className="mt-2 flex items-center justify-between text-sm">
@@ -553,9 +531,6 @@ export default function InventoryPage() {
                           {new Date(item.expiry_date).toLocaleDateString()}
                         </span>
                       </div>
-                      <div className={`mt-1 text-xs ${daysClass}`}>
-                        {daysLabel}
-                      </div>
                       <div className="mt-3 flex items-center justify-between">
                         <Badge className={getUrgencyBadgeClasses(item.urgency_score)}>
                           {getUrgencyBadgeText(item.urgency_score)}
@@ -565,7 +540,7 @@ export default function InventoryPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="hover:bg-destructive/10 hover:text-destructive"
+                              className="hover:bg-destructive/10 hover:text-destructive min-h-[44px] min-w-[44px]"
                             >
                               <MoreVertical className="h-4 w-4" />
                             </Button>
@@ -607,14 +582,14 @@ export default function InventoryPage() {
                 </TableHeader>
                 <TableBody>
                   <AnimatePresence>
-                    {filteredInventory.length === 0 ? (
+                    {activeInventory.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                          {searchQuery ? "No items match your search" : "No items in your inventory"}
+                          {searchQuery ? "No active items match your search" : "No active items in your inventory"}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredInventory.map((item, index) => (
+                      activeInventory.map((item, index) => (
                         <motion.tr
                           key={item.id}
                           initial={{ opacity: 0, y: 10 }}
@@ -628,7 +603,7 @@ export default function InventoryPage() {
                           <TableCell>
                             <Badge
                               variant={getBadgeVariant(item.status)}
-                              className={getBadgeClasses(item.status)}
+                              className={getBadgeClasses(item)}
                             >
                               {getStatusText(item)}
                             </Badge>
@@ -644,7 +619,7 @@ export default function InventoryPage() {
                                 variant="ghost"
                                 size="icon"
                                 title="Find recipes"
-                                className="hover:bg-coder-primary/10 hover:text-coder-primary"
+                                className="hover:bg-coder-primary/10 hover:text-coder-primary min-h-[44px] min-w-[44px]"
                                 onClick={() => findRecipesForItem(item.product_name)}
                               >
                                 <ChefHat className="h-4 w-4" />
@@ -654,7 +629,7 @@ export default function InventoryPage() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="hover:bg-destructive/10 hover:text-destructive"
+                                    className="hover:bg-destructive/10 hover:text-destructive min-h-[44px] min-w-[44px]"
                                   >
                                     <MoreVertical className="h-4 w-4" />
                                   </Button>
@@ -688,6 +663,133 @@ export default function InventoryPage() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Expired Items Section */}
+      {expiredInventory.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.5 }}
+          className="mt-8"
+        >
+          <Card className="border-destructive/30 bg-card/80 backdrop-blur-sm overflow-hidden">
+            <CardHeader>
+              <CardTitle className="text-lg text-destructive flex items-center">
+                <AlertTriangle className="mr-2 h-5 w-5" />
+                Expired Items
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 pb-24 md:pb-6">
+              <div className="md:hidden">
+                {expiredInventory.map((item) => (
+                  <div
+                    key={item.id}
+                    className="bg-card/80 backdrop-blur-sm rounded-xl p-4 mb-3 border border-destructive/20 overflow-hidden"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="font-medium truncate">{item.product_name}</div>
+                      <Badge variant="destructive" className="bg-destructive text-white">
+                        Expired
+                      </Badge>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-sm">
+                      <Badge variant="secondary" className="bg-muted/60 text-muted-foreground">
+                        {item.category}
+                      </Badge>
+                      <span className="text-muted-foreground">
+                        {new Date(item.expiry_date).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between">
+                      <Badge className={getUrgencyBadgeClasses(item.urgency_score)}>
+                        {getUrgencyBadgeText(item.urgency_score)}
+                      </Badge>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="hover:bg-destructive/10 hover:text-destructive min-h-[44px] min-w-[44px]"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="border-coder-primary/20 bg-card/90 backdrop-blur-md">
+                          <DropdownMenuItem
+                            onClick={() => handleItemAction(item.id, "discarded")}
+                            className="text-destructive hover:bg-destructive/10 focus:bg-destructive/10 py-3 md:py-2 min-h-[44px] md:min-h-0"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            🗑️ Discard (Waste)
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-destructive/20">
+                      <TableHead className="text-destructive">Item</TableHead>
+                      <TableHead className="text-destructive">Category</TableHead>
+                      <TableHead className="text-destructive">Expiry Date</TableHead>
+                      <TableHead className="text-destructive">Status</TableHead>
+                      <TableHead className="text-destructive">Urgency</TableHead>
+                      <TableHead className="text-right text-destructive">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {expiredInventory.map((item) => (
+                      <TableRow
+                        key={item.id}
+                        className="border-b border-border/40 hover:bg-destructive/5"
+                      >
+                        <TableCell className="font-medium">{item.product_name}</TableCell>
+                        <TableCell>{item.category}</TableCell>
+                        <TableCell>{new Date(item.expiry_date).toLocaleDateString()}</TableCell>
+                        <TableCell>
+                          <Badge variant="destructive" className="bg-destructive text-white">
+                            Expired
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={getUrgencyBadgeClasses(item.urgency_score)}>
+                            {getUrgencyBadgeText(item.urgency_score)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="hover:bg-destructive/10 hover:text-destructive min-h-[44px] min-w-[44px]"
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="border-coder-primary/20 bg-card/90 backdrop-blur-md">
+                              <DropdownMenuItem
+                                onClick={() => handleItemAction(item.id, "discarded")}
+                                className="text-destructive hover:bg-destructive/10 focus:bg-destructive/10 py-3 md:py-2 min-h-[44px] md:min-h-0"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                🗑️ Discard (Waste)
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
         </>
       )}
     </div>

@@ -392,13 +392,13 @@ export default function ScanPage() {
   }, [])
 
   return (
-    <div className="container max-w-md mx-auto p-4">
-      <h1 className="text-2xl font-bold bg-gradient-to-r from-coder-primary to-coder-accent bg-clip-text text-transparent text-center">Add Product</h1>
+    <div className="container max-w-md mx-auto px-4 md:px-6 lg:px-8 py-4">
+      <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-coder-primary to-coder-accent bg-clip-text text-transparent text-center mb-6">Add Product</h1>
 
       {showOptions && !result && !showProductForm ? (
         <div className="grid grid-cols-1 gap-4 mb-6">
           <Card
-            className="border-coder-primary/20 hover:border-coder-primary/50 transition-colors cursor-pointer"
+            className="border-coder-primary/20 hover:border-coder-primary/50 transition-colors cursor-pointer overflow-hidden"
             onClick={startScanning}
           >
             <CardHeader className="pb-2">
@@ -409,23 +409,27 @@ export default function ScanPage() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">Use your camera to scan the expiry date from a product</p>
-              <div className="flex gap-2 mt-4">
-                <Button className="flex-1" onClick={startScanning}>
-                  ⚡ Quick Scan (OCR) <ArrowRight className="ml-2 h-4 w-4" />
+              <div className="flex flex-col sm:flex-row gap-2 mt-4 w-full">
+                <Button className="w-full sm:w-auto flex-1 min-h-[44px]" onClick={startScanning}>
+                  <span className="sm:hidden">⚡ Quick Scan</span>
+                  <span className="hidden sm:inline">⚡ Quick Scan (OCR)</span>
+                  <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
                 <Button 
-                  className="flex-1 border-coder-secondary text-coder-secondary hover:bg-coder-secondary/10" 
+                  className="w-full sm:w-auto flex-1 min-h-[44px] border-coder-secondary text-coder-secondary hover:bg-coder-secondary/10" 
                   variant="outline"
                   onClick={startScanning}
                 >
-                  🤖 AI Scan (Gemini) <ArrowRight className="ml-2 h-4 w-4" />
+                  <span className="sm:hidden">🤖 AI Scan</span>
+                  <span className="hidden sm:inline">🤖 AI Scan (Gemini)</span>
+                  <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
             </CardContent>
           </Card>
 
           <Card
-            className="border-coder-accent/20 hover:border-coder-accent/50 transition-colors cursor-pointer"
+            className="border-coder-accent/20 hover:border-coder-accent/50 transition-colors cursor-pointer overflow-hidden"
             onClick={goToManualEntry}
           >
             <CardHeader className="pb-2">
@@ -438,7 +442,7 @@ export default function ScanPage() {
               <p className="text-sm text-muted-foreground">Manually enter product details and expiry date</p>
               <Button
                 variant="outline"
-                className="w-full mt-4 border-coder-accent/50 text-coder-accent hover:bg-coder-accent/10"
+                className="w-full mt-4 min-h-[44px] border-coder-accent/50 text-coder-accent hover:bg-coder-accent/10"
               >
                 Enter Details <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
@@ -575,14 +579,14 @@ export default function ScanPage() {
                 stopScanning()
                 setShowOptions(true)
               }}
-              className="flex-1"
+              className="flex-1 min-h-[44px]"
             >
               <X className="mr-2 h-4 w-4" /> Cancel
             </Button>
-            <div className="flex gap-2 flex-1">
+            <div className="flex flex-col sm:flex-row gap-2 flex-1 w-full">
               <Button 
                 onClick={captureFrame} 
-                className="flex-1" 
+                className="w-full sm:w-auto flex-1 min-h-[44px]" 
                 disabled={processing || aiProcessing}
               >
                 {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Camera className="mr-2 h-4 w-4" />}
@@ -590,7 +594,7 @@ export default function ScanPage() {
               </Button>
               <Button 
                 onClick={captureFrameForAI} 
-                className="flex-1 border-coder-secondary text-coder-secondary hover:bg-coder-secondary/10"
+                className="w-full sm:w-auto flex-1 min-h-[44px] border-coder-secondary text-coder-secondary hover:bg-coder-secondary/10"
                 variant="outline"
                 disabled={processing || aiProcessing}
               >

@@ -153,12 +153,12 @@ export default function AnalyticsPage() {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto p-4 max-w-6xl space-y-6">
+      <div className="container mx-auto px-4 md:px-6 lg:px-8 py-4 max-w-6xl space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {skeletonCards.map((_, index) => (
             <Card
               key={`analytics-skeleton-${index}`}
-              className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm animate-pulse"
+              className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm animate-pulse overflow-hidden"
             >
               <CardContent className="p-5 space-y-3">
                 <div className="h-4 w-24 bg-muted/40 rounded" />
@@ -169,23 +169,23 @@ export default function AnalyticsPage() {
           ))}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm animate-pulse h-[340px]" />
-          <Card className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm animate-pulse h-[340px]" />
+          <Card className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm animate-pulse h-[340px] overflow-hidden" />
+          <Card className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm animate-pulse h-[340px] overflow-hidden" />
         </div>
-        <Card className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm animate-pulse h-[260px]" />
+        <Card className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm animate-pulse h-[260px] overflow-hidden" />
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="container mx-auto p-4 max-w-6xl">
-        <Card className="border border-coder-primary/50 bg-card/80 backdrop-blur-sm">
+      <div className="container mx-auto px-4 md:px-6 lg:px-8 py-4 max-w-6xl">
+        <Card className="border border-coder-primary/50 bg-card/80 backdrop-blur-sm overflow-hidden">
           <CardContent className="p-6 flex flex-col gap-4 items-start">
             <p className="text-sm">⚠️ Failed to load data — {error}</p>
             <Button
               variant="outline"
-              className="border-coder-primary/50 text-coder-primary hover:bg-coder-primary/10"
+              className="border-coder-primary/50 text-coder-primary hover:bg-coder-primary/10 min-h-[44px]"
               onClick={loadAnalytics}
             >
               Retry
@@ -198,8 +198,8 @@ export default function AnalyticsPage() {
 
   if (emptyState) {
     return (
-      <div className="container mx-auto p-4 max-w-6xl">
-        <Card className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm">
+      <div className="container mx-auto px-4 md:px-6 lg:px-8 py-4 max-w-6xl">
+        <Card className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm overflow-hidden">
           <CardContent className="p-10 text-center space-y-4">
             <div className="text-5xl">📊</div>
             <div>
@@ -207,7 +207,7 @@ export default function AnalyticsPage() {
               <p className="text-sm text-muted-foreground">Add items to your inventory and start tracking consumption.</p>
             </div>
             <Button
-              className="bg-coder-primary hover:bg-coder-primary/80 text-black"
+              className="bg-coder-primary hover:bg-coder-primary/80 text-black min-h-[44px]"
               onClick={() => router.push("/inventory")}
             >
               Go to Inventory
@@ -219,17 +219,17 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="container mx-auto p-4 max-w-6xl space-y-6">
+    <div className="container mx-auto px-4 md:px-6 lg:px-8 py-4 max-w-6xl space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-coder-primary to-coder-accent bg-clip-text text-transparent">
+          <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-coder-primary to-coder-accent bg-clip-text text-transparent">
             Analytics
           </h1>
           <p className="text-sm text-muted-foreground">Track waste reduction and pantry performance.</p>
         </div>
         <Button
           variant="outline"
-          className="border-coder-primary/50 text-coder-primary hover:bg-coder-primary/10"
+          className="border-coder-primary/50 text-coder-primary hover:bg-coder-primary/10 min-h-[44px]"
           onClick={loadAnalytics}
         >
           <RefreshCcw className="mr-2 h-4 w-4" /> Refresh
@@ -265,13 +265,18 @@ export default function AnalyticsPage() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <Card className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm">
+        <Card className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm overflow-hidden">
           <CardHeader>
             <CardTitle className="text-lg text-coder-primary">Inventory Status</CardTitle>
           </CardHeader>
-          <CardContent className="h-[340px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
+          <CardContent className="h-[250px] md:h-[340px] w-full overflow-hidden" style={{ minWidth: 0 }}>
+            {pieData.every(d => d.value === 0) ? (
+              <div className="h-full flex items-center justify-center text-muted-foreground text-center">
+                No inventory data yet — add items to see analytics
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
                 <Pie
                   data={pieData}
                   dataKey="value"
@@ -317,13 +322,14 @@ export default function AnalyticsPage() {
                 <Legend />
                 <Bar dataKey="total" fill={BAR_TOTAL_COLOR} radius={[6, 6, 0, 0]} name="Total" />
                 <Bar dataKey="critical" fill={BAR_CRITICAL_COLOR} radius={[6, 6, 0, 0]} name="Critical" />
-              </BarChart>
-            </ResponsiveContainer>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      <Card className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm">
+      <Card className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm overflow-hidden">
         <CardHeader>
           <CardTitle className="text-lg text-coder-primary">Consumption History</CardTitle>
         </CardHeader>

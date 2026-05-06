@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { ScanLine, LayoutGrid, ChefHat, Menu, User, LogOut, Code, BarChart2 } from "lucide-react"
+import { ScanLine, LayoutGrid, ChefHat, Menu, User, LogOut, Code, BarChart2, Home } from "lucide-react"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { useState, useEffect } from "react"
 import NotificationsPopover from "@/components/notifications"
@@ -48,7 +48,7 @@ export default function Navbar() {
     {
       name: "Home",
       path: "/",
-      icon: LayoutGrid,
+      icon: Home,
     },
     {
       name: "Scan",
@@ -87,7 +87,7 @@ export default function Navbar() {
   }
 
   const filteredRoutes = routes.filter((route) => !route.requiresAuth || (route.requiresAuth && isAuthenticated))
-  const mobileRoutes = filteredRoutes.filter((route) => route.path !== "/")
+  const mobileRoutes = filteredRoutes
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60">
@@ -229,7 +229,7 @@ export default function Navbar() {
       {/* Mobile bottom navigation */}
       {isAuthenticated && (
         <div className="md:hidden fixed bottom-0 left-0 z-50 w-full h-16 bg-background/80 backdrop-blur-lg border-t border-border/40">
-          <div className="grid h-full grid-cols-4">
+          <div className="grid h-full grid-cols-5">
             {mobileRoutes.map((route) => (
               <button
                 key={route.path}

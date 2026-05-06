@@ -121,12 +121,12 @@ export default function RecipesPage() {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto p-4 max-w-4xl">
+      <div className="container mx-auto px-4 md:px-6 lg:px-8 py-4 max-w-4xl">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {skeletonCards.map((_, index) => (
             <Card
               key={`recipe-skeleton-${index}`}
-              className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm animate-pulse"
+              className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm animate-pulse overflow-hidden"
             >
               <div className="h-48 w-full bg-muted/40" />
               <CardContent className="py-4 space-y-3">
@@ -146,23 +146,23 @@ export default function RecipesPage() {
   }
 
   return (
-    <div className="container mx-auto p-4 max-w-4xl">
+    <div className="container mx-auto px-4 md:px-6 lg:px-8 py-4 max-w-4xl">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
-        <h1 className="text-2xl font-bold bg-gradient-to-r from-coder-primary to-coder-accent bg-clip-text text-transparent">Recipe Suggestions</h1>
+        <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-coder-primary to-coder-accent bg-clip-text text-transparent">Recipe Suggestions</h1>
         <Link href="/recipes/generate" className="w-full md:w-auto">
-          <Button className="w-full md:w-auto">
+          <Button className="w-full md:w-auto min-h-[44px]">
             <ChefHat className="mr-2 h-4 w-4" /> Generate Custom Recipe
           </Button>
         </Link>
       </div>
 
       {error && (
-        <Card className="mb-6 border border-coder-primary/50 bg-card/80 backdrop-blur-sm">
+        <Card className="mb-6 border border-coder-primary/50 bg-card/80 backdrop-blur-sm overflow-hidden">
           <CardContent className="p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <p className="text-sm">⚠️ Failed to load data — {error}</p>
             <Button
               variant="outline"
-              className="border-coder-primary/50 text-coder-primary hover:bg-coder-primary/10"
+              className="border-coder-primary/50 text-coder-primary hover:bg-coder-primary/10 min-h-[44px]"
               onClick={loadRecipes}
             >
               Retry
@@ -172,7 +172,7 @@ export default function RecipesPage() {
       )}
 
       {inventoryEmpty && !error && (
-        <Card className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm">
+        <Card className="border border-coder-primary/20 bg-card/80 backdrop-blur-sm overflow-hidden">
           <CardContent className="p-10 text-center space-y-4">
             <div className="text-4xl">\ud83e\udd6b</div>
             <div>
@@ -180,7 +180,7 @@ export default function RecipesPage() {
               <p className="text-sm text-muted-foreground">Scan your first item to start generating recipes.</p>
             </div>
             <Button
-              className="bg-coder-primary hover:bg-coder-primary/80 text-black"
+              className="bg-coder-primary hover:bg-coder-primary/80 text-black min-h-[44px]"
               onClick={() => router.push("/scan")}
             >
               Scan Your First Item
@@ -192,7 +192,7 @@ export default function RecipesPage() {
       {!inventoryEmpty && !error && (
         <>
           {/* Expiring ingredients section */}
-          <Card className="mb-8">
+          <Card className="mb-8 overflow-hidden">
             <CardHeader>
               <CardTitle className="text-lg">Using Your Expiring Ingredients</CardTitle>
             </CardHeader>
@@ -209,7 +209,7 @@ export default function RecipesPage() {
                 )}
               </div>
               <Link href="/recipes/generate">
-                <Button className="w-full">
+                <Button className="w-full min-h-[44px]">
                   <Plus className="mr-2 h-4 w-4" /> Create Recipe With These Ingredients
                 </Button>
               </Link>
@@ -224,7 +224,7 @@ export default function RecipesPage() {
                 <TabsTrigger value="quick">Quick & Easy</TabsTrigger>
                 <TabsTrigger value="best">Best Match</TabsTrigger>
               </TabsList>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" className="min-h-[44px]">
                 <Filter className="mr-2 h-4 w-4" /> Filter
               </Button>
             </div>
@@ -279,7 +279,16 @@ function RecipeCard({ recipe }: { recipe: Recipe }) {
 
   return (
     <Card className="overflow-hidden w-full">
-      <img src={recipe.image || "/placeholder.svg"} alt={recipe.title} className="w-full h-32 md:h-48 object-cover" />
+      {recipe.image ? (
+        <img src={recipe.image} alt={recipe.title} className="w-full h-32 md:h-48 object-cover" />
+      ) : (
+        <div className="w-full h-32 md:h-48 bg-gradient-to-br from-coder-primary/10 to-coder-accent/10 flex items-center justify-center text-6xl">
+          {recipe.title.toLowerCase().includes('salad') ? '🥗' :
+           recipe.title.toLowerCase().includes('soup') ? '🍲' :
+           recipe.title.toLowerCase().includes('curry') || recipe.title.toLowerCase().includes('stew') ? '🥘' :
+           recipe.title.toLowerCase().includes('bowl') ? '🍱' : '🍳'}
+        </div>
+      )}
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start gap-3">
           <CardTitle className="text-lg">{recipe.title}</CardTitle>
@@ -312,7 +321,7 @@ function RecipeCard({ recipe }: { recipe: Recipe }) {
         </div>
       </CardContent>
       <CardFooter>
-        <Button variant="outline" size="sm" className="w-full">
+        <Button variant="outline" size="sm" className="w-full min-h-[44px]">
           View Recipe
         </Button>
       </CardFooter>
