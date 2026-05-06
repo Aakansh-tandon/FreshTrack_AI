@@ -24,6 +24,7 @@ export default function Navbar() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -128,7 +129,7 @@ export default function Navbar() {
 
         <div className="flex flex-1 items-center justify-between space-x-2 md:justify-end">
           <div className="w-full flex-1 md:w-auto md:flex-none flex items-center gap-2">
-            {isAuthenticated && <NotificationsPopover />}
+            {isAuthenticated && <NotificationsPopover onUnreadChange={setUnreadCount} />}
 
             {isAuthenticated ? (
               <DropdownMenu>
@@ -238,7 +239,14 @@ export default function Navbar() {
                   pathname === route.path ? "text-coder-primary" : "text-muted-foreground hover:text-coder-primary"
                 }`}
               >
-                <route.icon className="h-6 w-6" />
+                <div className="relative">
+                  <route.icon className="h-6 w-6" />
+                  {route.name === "Inventory" && unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-coder-primary text-[10px] font-bold text-black animate-pulse-glow">
+                      {unreadCount}
+                    </span>
+                  )}
+                </div>
                 <span className="text-xs mt-1">{route.name}</span>
               </button>
             ))}

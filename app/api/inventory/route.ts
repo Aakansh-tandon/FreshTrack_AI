@@ -78,21 +78,40 @@ export async function POST(request: Request) {
 
     if (error) throw error
 
-    // Check if expiry is within 3 days — create notification
+    // Check if expiry is within 7 days — create notification
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     const expiry = new Date(expiry_date)
     expiry.setHours(0, 0, 0, 0)
     const diffMs = expiry.getTime() - today.getTime()
-    const daysUntilExpiry = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+    const daysUntilExpiry = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
-    if (daysUntilExpiry <= 3) {
-      const notifType = daysUntilExpiry <= 1 ? "critical" : "warning"
-      const message =
-        daysUntilExpiry <= 0
-          ? `${product_name} has expired → Generate a recipe now`
-          : `${product_name} expires in ${daysUntilExpiry} day${daysUntilExpiry === 1 ? "" : "s"} → Generate a recipe now`
+    let notifType = ""
+    let message = ""
 
+    if (daysUntilExpiry <= 0) {
+      notifType = "critical"
+      message = `⚠️ ${product_name} is already expired! Remove it from pantry`
+    } else if (daysUntilExpiry === 1) {
+      notifType = "critical"
+      message = `🚨 ${product_name} expires TOMORROW — check recipes now`
+    } else if (daysUntilExpiry <= 3) {
+      notifType = "warning"
+      let suggestion = "use it in tonight's dinner"
+      const cat = (category || "").toLowerCase()
+      if (cat.includes("dairy") || cat.includes("milk") || cat.includes("cheese")) suggestion = "make a smoothie or cheese sauce"
+      else if (cat.includes("meat") || cat.includes("poultry") || cat.includes("beef")) suggestion = "grill it tonight or freeze it"
+      else if (cat.includes("produce") || cat.includes("vegetable") || cat.includes("fruit")) suggestion = "add to a stir-fry or salad"
+      else if (cat.includes("seafood") || cat.includes("fish")) suggestion = "pan-sear with lemon tonight"
+      else if (cat.includes("bakery") || cat.includes("bread")) suggestion = "make French toast or croutons"
+      
+      message = `⏰ ${product_name} expires in ${daysUntilExpiry} day(s) → Try: ${suggestion}`
+    } else if (daysUntilExpiry <= 7) {
+      notifType = "info"
+      message = `📅 ${product_name} expires in ${daysUntilExpiry} days — added to your watch list`
+    }
+
+    if (message) {
       await supabaseAdmin.from("notifications").insert({
         user_id: user.id,
         message,

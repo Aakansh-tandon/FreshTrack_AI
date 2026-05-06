@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { AnimatePresence, motion } from "framer-motion"
 import { supabase } from "@/lib/supabase"
+import ExpiryAlert from "@/components/expiry-alert"
 import { useInventory } from "@/hooks/use-inventory"
 import {
   DropdownMenu,
@@ -135,7 +136,7 @@ export default function InventoryPage() {
 
         if (!cancelled) setScoredInventory(sortedByUrgency)
       } catch (rankError) {
-        console.error("Urgency scoring failed, using expiry fallback:", rankError)
+        console.warn("Urgency scoring failed (is the backend running?), using expiry fallback:", rankError)
         if (!cancelled) setScoredInventory(fallbackSorted)
       }
     }
@@ -229,6 +230,13 @@ export default function InventoryPage() {
         const token = await getToken()
         if (!token) return
 
+        // 1. Generate daily notifications
+        await fetch("/api/notifications/generate", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` }
+        }).catch(e => console.error("Error generating notifications", e))
+
+        // 2. Trigger auto-recipe
         const response = await fetch("/api/auto-trigger", {
           headers: { Authorization: `Bearer ${token}` },
         })
@@ -792,6 +800,8 @@ export default function InventoryPage() {
       )}
         </>
       )}
+      <ExpiryAlert />
     </div>
   )
 }
+

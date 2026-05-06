@@ -139,6 +139,22 @@ export async function GET(request: Request) {
 
     if (notifError) throw notifError
 
+    // 6. Call notification generator internally
+    try {
+      const authHeader = request.headers.get("Authorization")
+      const baseUrl = request.headers.get("host") ? `http://${request.headers.get("host")}` : "http://localhost:3000"
+      
+      if (authHeader) {
+        // Fire and forget
+        fetch(`${baseUrl}/api/notifications/generate`, {
+          method: "POST",
+          headers: { "Authorization": authHeader }
+        }).catch(e => console.error("Internal generator call failed", e))
+      }
+    } catch (e) {
+      console.error("Internal generator block failed", e)
+    }
+
     return NextResponse.json({
       triggered: true,
       recipe_title: recipe.title,
